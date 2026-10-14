@@ -1,0 +1,1651 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CODE ROGUE</title>
+<style>
+:root{
+  --bg:#0A0E0A; --green:#00FF41; --cyan:#00E5FF; --amber:#FFB000;
+  --gold:#FFD700; --purple:#B388FF; --red:#FF3B30; --shield:#4FC3F7;
+  --dim:#0F5C22; --dim2:#073d15; --panel:#0d140d;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:var(--bg); color:var(--green);
+  font-family:ui-monospace,"SFMono-Regular",Menlo,Consolas,"DejaVu Sans Mono","Noto Sans Mono CJK SC",monospace;
+  font-size:13px; line-height:1.45; overflow:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+body::after{
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:999;
+  background:repeating-linear-gradient(0deg,rgba(0,0,0,.25) 0 1px,transparent 1px 3px);
+  opacity:.35;
+}
+#app{display:flex;flex-direction:column;height:100vh;max-width:1180px;margin:0 auto;padding:6px 10px;gap:5px}
+
+/* ---------- 状态条 ---------- */
+#status{display:flex;gap:8px;flex-wrap:wrap;align-items:center;border:1px solid var(--dim);background:var(--panel);padding:5px 8px;flex:0 0 auto}
+.st{display:flex;align-items:center;gap:4px;white-space:nowrap}
+.st .lb{color:var(--dim);font-size:11px}
+.bar{display:inline-block;width:78px;height:9px;border:1px solid var(--dim);position:relative;background:#000}
+.bar i{position:absolute;left:0;top:0;bottom:0;background:var(--green);display:block}
+.bar.hp i{background:var(--red)} .bar.sh i{background:var(--shield)} .bar.mem i{background:var(--purple)}
+#stFloor{color:var(--amber)} #stGold{color:var(--gold)}
+.spacer{flex:1}
+.mini{font-size:11px;color:var(--cyan);cursor:pointer;border:1px solid var(--dim);padding:1px 6px}
+.mini:hover{border-color:var(--green);color:var(--green)}
+
+/* ---------- 敌人区 ---------- */
+#enemyZone{flex:0 0 auto;border:1px solid var(--dim);background:var(--panel);padding:6px;min-height:150px}
+#enemyList{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+.enemy{text-align:center;min-width:150px;position:relative}
+.enemy.dead{opacity:.25;filter:grayscale(1)}
+.art{font-size:12px;line-height:1.15;color:var(--green);white-space:pre;text-shadow:0 0 6px rgba(0,255,65,.35)}
+.art.boss{color:var(--amber);text-shadow:0 0 8px rgba(255,176,0,.5)}
+.art.hurt{animation:shake .25s}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+.ename{color:var(--white,#fff);font-size:12px;margin-top:3px}
+.ehp{width:140px;height:10px;border:1px solid var(--dim);margin:3px auto 0;position:relative;background:#000}
+.ehp i{position:absolute;left:0;top:0;bottom:0;background:var(--red)}
+.ehp b{position:absolute;left:0;right:0;top:-1px;font-size:9px;color:#fff;font-weight:400;text-align:center}
+.intent{margin:4px auto 0;border:1px solid var(--amber);background:#150f00;color:var(--amber);padding:2px 6px;font-size:11px;max-width:190px}
+.intent.break{border-color:var(--purple);color:var(--purple);background:#0d0820}
+.intent.buff{border-color:var(--cyan);color:var(--cyan);background:#001318}
+.intent.charge{border-color:var(--dim);color:var(--dim)}
+.armor{font-size:10px;color:var(--shield)}
+.mask{font-size:10px;color:var(--gold)}
+
+/* ---------- 语法树 ---------- */
+#treeZone{flex:0 0 auto;border:1px solid var(--dim);background:#070c07;height:104px;overflow:auto;position:relative}
+#treeInner{position:relative;min-height:100px;padding:4px}
+.tn{position:absolute;width:44px;text-align:center;font-size:13px;padding:1px 0;border:1px solid transparent;border-radius:2px}
+.tn.num,.tn.var{color:#fff;border-color:#444;background:#111}
+.tn.op{color:var(--amber);border-color:var(--amber);background:#1a1100}
+.tn.paren{color:var(--gold)}
+.tn.bad{color:var(--red);border-color:var(--red)}
+#treeLinks{position:absolute;left:0;top:0;pointer-events:none}
+#treeEmpty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--dim);font-size:12px}
+
+/* ---------- 编辑器 ---------- */
+#editorZone{flex:1 1 auto;border:1px solid var(--dim);background:var(--panel);padding:6px;display:flex;flex-direction:column;gap:5px;min-height:0}
+.etabs{display:flex;gap:4px;flex-wrap:wrap}
+.etab{border:1px solid var(--dim);padding:1px 8px;font-size:11px;cursor:pointer;color:var(--dim)}
+.etab.on{border-color:var(--green);color:var(--green);background:#04180a}
+.etab .cost{color:var(--amber)}
+#exprRow{border:1px dashed var(--dim);min-height:38px;display:flex;align-items:center;gap:2px;padding:4px;flex-wrap:wrap;position:relative;background:#050805}
+#exprRow.drop{background:#0a1c0d;border-color:var(--green)}
+.gap{width:5px;height:26px;background:transparent}
+.gap.hot{background:var(--green);box-shadow:0 0 6px var(--green)}
+.tk{display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:26px;padding:0 5px;border:1px solid #333;background:#0e140e;color:#fff;cursor:grab;user-select:none;font-size:13px}
+.tk.var{color:#fff;border-color:#666}
+.tk.const{color:#fff;border-color:#666;background:#141414}
+.tk.op{color:var(--amber);border-color:var(--amber);background:#1a1100}
+.tk.paren{color:var(--gold);border-color:var(--gold);background:#161200}
+.tk.frozen{opacity:.45;border-style:dashed;border-color:var(--red);color:var(--red)}
+.tk.ghost{opacity:.35}
+.tk.dragging{opacity:.25}
+#tray{border:1px solid var(--dim);min-height:34px;display:flex;gap:3px;padding:4px;flex-wrap:wrap;align-items:center;background:#050805;max-height:96px;overflow:auto}
+.traylb{color:var(--dim);font-size:11px;margin-right:2px}
+#evalLine{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12px}
+#evalVal{font-size:20px;color:var(--green);min-width:60px}
+#evalVal.warn{color:var(--amber)} #evalVal.bad{color:var(--red);animation:blink .6s infinite}
+@keyframes blink{50%{opacity:.35}}
+#evalNote{color:var(--dim);font-size:11px}
+.warnline{color:var(--amber);font-size:11px}
+.errline{color:var(--red);font-size:11px}
+#fnRow{display:flex;gap:5px;flex-wrap:wrap}
+.fn{border:1px solid var(--purple);background:#100818;color:var(--purple);padding:2px 8px;font-size:12px;cursor:pointer}
+.fn:hover{background:#1c0f2c}
+.fn.on{background:var(--purple);color:#000}
+.fn.no{opacity:.35;cursor:not-allowed}
+.fn .m{font-size:10px;opacity:.8}
+#actRow{display:flex;gap:8px;align-items:center}
+button.act{border:1px solid var(--green);background:#04180a;color:var(--green);padding:5px 16px;font-family:inherit;font-size:13px;cursor:pointer}
+button.act:hover{background:var(--green);color:#000}
+button.act:disabled{opacity:.3;cursor:not-allowed}
+button.ghost{border-color:var(--dim);color:var(--dim)}
+
+/* ---------- 日志 ---------- */
+#logZone{flex:0 0 auto;height:118px;border:1px solid var(--dim);background:#050805;overflow:auto;padding:4px 8px;font-size:12px}
+#logZone div{white-space:pre-wrap}
+.lc{color:var(--cyan)} .lw{color:var(--amber)} .le{color:var(--red)} .lg{color:var(--green)} .lw2{color:var(--dim)} .lp{color:var(--purple)} .lwh{color:#fff}
+
+/* ---------- overlay ---------- */
+#overlay{position:fixed;inset:0;background:rgba(3,6,3,.94);z-index:200;display:none;align-items:center;justify-content:center;padding:16px;overflow:auto}
+#overlay.on{display:flex}
+.card{border:1px solid var(--green);background:var(--bg);max-width:880px;width:100%;padding:14px 16px;max-height:92vh;overflow:auto;box-shadow:0 0 40px rgba(0,255,65,.15)}
+.card h2{font-size:16px;margin-bottom:4px;color:var(--green);font-weight:400}
+.card h3{font-size:13px;margin:10px 0 4px;color:var(--amber);font-weight:400}
+.card .sub{color:var(--dim);font-size:12px;margin-bottom:8px}
+.opts{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.opt{border:1px solid var(--dim);padding:7px 10px;cursor:pointer;min-width:210px;flex:1 1 210px;background:var(--panel)}
+.opt:hover{border-color:var(--green);background:#04180a}
+.opt .t{color:#fff;font-size:13px}
+.opt .d{color:var(--dim);font-size:11px;margin-top:2px}
+.opt .r{font-size:10px;margin-top:2px}
+.rC{color:var(--dim)} .rR{color:var(--cyan)} .rE{color:var(--purple)} .rL{color:var(--gold)}
+.kbd{border:1px solid var(--dim);padding:0 4px;color:var(--cyan)}
+.big{font-size:26px;color:var(--red);text-align:center;padding:10px 0}
+.segv{background:#140000;border:1px solid var(--red);padding:10px;color:var(--red);white-space:pre-wrap;font-size:13px;margin:8px 0}
+.hl{color:#fff}
+table.t{width:100%;border-collapse:collapse;font-size:11px;margin-top:6px}
+table.t td,table.t th{border:1px solid var(--dim);padding:3px 5px;text-align:left}
+table.t th{color:var(--amber);font-weight:400}
+#ghost{position:fixed;z-index:500;pointer-events:none;width:26px;height:26px;display:flex;align-items:center;justify-content:center;border:1px solid var(--green);background:#0e140e;color:#fff;font-size:13px}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="status"></div>
+  <div id="enemyZone"><div id="enemyList"></div></div>
+  <div id="treeZone"><div id="treeInner"><svg id="treeLinks"></svg><div id="treeEmpty">// 表达式为空 — 从下方托盘拖入 token</div></div></div>
+  <div id="editorZone">
+    <div class="etabs" id="etabs"></div>
+    <div id="exprRow"></div>
+    <div id="tray"></div>
+    <div id="evalLine">
+      <span style="color:var(--dim)">damage =</span><span id="evalVal">0</span>
+      <span id="evalNote"></span>
+    </div>
+    <div id="warnBox"></div>
+    <div id="fnRow"></div>
+    <div id="actRow"></div>
+  </div>
+  <div id="logZone"></div>
+</div>
+<div id="overlay"><div class="card" id="card"></div></div>
+<div id="ghost" style="display:none"></div>
+
+<script>
+"use strict";
+/* =========================================================
+   CODE ROGUE — 单文件原型
+   1. 表达式引擎   2. 数据表   3. 游戏状态   4. 战斗   5. 关卡   6. UI
+   ========================================================= */
+
+/* ---------------------- 0. 工具 ---------------------- */
+const INT_MAX = 2147483647, INT_MIN = -2147483648;
+const BIG = 1e18;
+const $ = s => document.querySelector(s);
+const el = (t, c, h) => { const e = document.createElement(t); if (c) e.className = c; if (h != null) e.innerHTML = h; return e; };
+const rnd = n => Math.floor(Math.random() * n);
+const pick = a => a[rnd(a.length)];
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+function cl(v) { if (!isFinite(v)) return v > 0 ? BIG : -BIG; if (v > BIG) return BIG; if (v < -BIG) return -BIG; return Math.trunc(v); }
+function fmt(n) {
+  n = Math.trunc(n); const s = n < 0 ? '-' : ''; n = Math.abs(n);
+  if (n < 10000) return s + n;
+  if (n < 1e6) return s + (n / 1e3).toFixed(1) + 'K';
+  if (n < 1e9) return s + (n / 1e6).toFixed(2) + 'M';
+  return s + (n / 1e9).toFixed(2) + 'B';
+}
+function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = rnd(i + 1);[a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+/* ---------------------- 1. 表达式引擎 ---------------------- */
+// 优先级（文档 7 章）：?: < | < ^ < & < << >> < + - < * / % < 一元 < **
+const BIN = {
+  '?:': { p: 1, right: true }, '|': { p: 3 }, '^': { p: 4 }, '&': { p: 5 },
+  '<<': { p: 6 }, '>>': { p: 6 }, '+': { p: 7 }, '-': { p: 7 },
+  '*': { p: 8 }, '/': { p: 8 }, '%': { p: 8 }, '**': { p: 10, right: true }
+};
+const UN = { '~': 9, '!': 9, '-': 9, '+': 9 };
+
+function tokenize(ids, poolMap) { return ids.map(id => poolMap[id]).filter(Boolean); }
+
+function parse(tokens) {
+  let i = 0; const unmatched = [];
+  function peek() { return tokens[i]; }
+  function parseExpr(min) {
+    let left = parseUn();
+    for (; ;) {
+      const t = peek(); if (!t || t.kind !== 'op') break;
+      const info = BIN[t.label]; if (!info || info.p < min) break;
+      i++; const idx = t._i;
+      const right = parseExpr(info.right ? info.p : info.p + 1);
+      left = { k: 'bin', op: t.label, l: left, r: right, idx };
+    }
+    return left;
+  }
+  function parseUn() {
+    const t = peek();
+    if (t && t.kind === 'op' && UN[t.label] !== undefined) {
+      i++; const idx = t._i; const x = parseUn();
+      return { k: 'un', op: t.label, x, idx };
+    }
+    return parseAtom();
+  }
+  function parseAtom() {
+    const t = peek(); if (!t) return { k: 'err', idx: -1 };
+    if (t.kind === 'paren' && t.label === '(') {
+      i++; const idx = t._i; const e = parseExpr(0);
+      const c = peek();
+      if (c && c.kind === 'paren' && c.label === ')') i++; else unmatched.push(idx);
+      return e;
+    }
+    if (t.kind === 'paren') { i++; return { k: 'err', idx: t._i }; }
+    i++;
+    if (t.kind === 'var') return { k: 'var', name: t.label, idx: t._i };
+    if (t.kind === 'const') return { k: 'num', v: t.val || 0, idx: t._i, inf: !!t.inf, nan: !!t.nan };
+    return { k: 'err', idx: t._i };
+  }
+  const root = parseExpr(0);
+  return { root, consumed: i, unmatched };
+}
+
+function powi(a, b) {
+  if (b < 0) return 0; if (b === 0) return 1; if (b > 1000) return BIG;
+  let r = 1, base = a;
+  while (b > 0) {
+    if (b & 1) { r = cl(r * base); if (Math.abs(r) > BIG / 2) return BIG; }
+    b >>= 1; if (b) { base = cl(base * base); if (Math.abs(base) > BIG / 2) return BIG; }
+  }
+  return r;
+}
+const b64 = f => { try { return Number(BigInt.asIntN(64, f(BigInt(Math.trunc(f.a)), BigInt(Math.trunc(f.b))))); } catch (e) { return 0; } };
+function bitop(op, a, b) {
+  a = cl(a); b = cl(b);
+  if (Math.abs(a) > BIG / 2 || Math.abs(b) > BIG / 2) return 0;
+  const A = BigInt(a), B = BigInt(b); let r;
+  if (op === '&') r = A & B; else if (op === '|') r = A | B; else if (op === '^') r = A ^ B;
+  else if (op === '<<') r = A << (B > 99n ? 99n : B); else r = A >> (B > 99n ? 99n : B);
+  return Number(BigInt.asIntN(64, r));
+}
+function binop(op, a, b) {
+  switch (op) {
+    case '+': return cl(a + b);
+    case '-': return cl(a - b);
+    case '*': return cl(a * b);
+    case '/': return b === 0 ? 0 : cl(Math.floor(a / b));
+    case '%': return b === 0 ? 0 : cl(a % b);
+    case '**': return powi(a, b);
+    case '<<': case '>>': case '&': case '|': case '^': return cl(bitop(op, a, b));
+    default: return cl(a + b);
+  }
+}
+// ctx: {vars, frozen:Set(idx), lowHp:bool}
+function ev(n, ctx) {
+  if (!n) return 0;
+  if (n.k === 'num') return ctx.frozen && ctx.frozen.has(n.idx) ? 0 : (n.inf ? Math.floor(ctx.infVal || 0) : n.v);
+  if (n.k === 'var') return ctx.frozen && ctx.frozen.has(n.idx) ? 0 : (ctx.vars[n.name] || 0);
+  if (n.k === 'un') {
+    let x = ev(n.x, ctx); let op = n.op;
+    if (ctx.frozen && ctx.frozen.has(n.idx)) op = '+';
+    if (op === '-') return cl(-x);
+    if (op === '+') return x;
+    if (op === '!') return x === 0 ? 1 : 0;
+    if (op === '~') return cl(bitop('^', x, -1));
+    return x;
+  }
+  if (n.k === 'bin') {
+    let op = n.op;
+    if (ctx.frozen && ctx.frozen.has(n.idx)) op = '+';
+    if (op === '?:') {
+      // 语义：HP 低于 50% 取右侧（防御值），否则取左侧
+      return ctx.lowHp ? ev(n.r, ctx) : ev(n.l, ctx);
+    }
+    const a = ev(n.l, ctx), b = ev(n.r, ctx);
+    return binop(op, a, b);
+  }
+  return 0;
+}
+function evalTokens(ids, poolMap, ctx) {
+  const toks = ids.map((id, k) => { const t = poolMap[id]; return t ? Object.assign({}, t, { _i: k }) : null; }).filter(Boolean);
+  const { root, unmatched } = parse(toks);
+  const v = Math.trunc(ev(root, ctx));
+  return { v, root, unmatched, toks };
+}
+// token 预算消耗
+function tokenCost(ids, poolMap) {
+  let c = 0;
+  for (const id of ids) { const t = poolMap[id]; if (!t) continue; c += (t.label === '?:' ? 3 : (t.cost || 1)); }
+  return c;
+}
+function usedTokens() {
+  let c = tokenCost(G.expr, TOK);
+  for (const f of G.funcs) if (FUNCS[f] && FUNCS[f].p) c += tokenCost(G.params[f] || [], TOK);
+  return c;
+}
+function effT() {
+  let t = usedTokens() - (G.debtOffset || 0);
+  return t < 0 ? 0 : t;
+}
+function trimTail(out) {
+  while (out.length) {
+    const last = TOK[out[out.length - 1]];
+    if (last && (last.kind === 'op' || (last.kind === 'paren' && last.label === '('))) out.pop();
+    else break;
+  }
+  return out;
+}
+function effBudget(ids, budget) {
+  let c = 0; const out = [];
+  for (const id of ids) {
+    const t = TOK[id]; if (!t) continue;
+    const cost = t.label === '?:' ? 3 : (t.cost || 1);
+    if (c + cost > budget) break;
+    c += cost; out.push(id);
+  }
+  return trimTail(out);
+}
+function cutIndex(ids, budget) {
+  let c = 0, out = [];
+  for (let i = 0; i < ids.length; i++) {
+    const t = TOK[ids[i]]; if (!t) continue;
+    const cost = t.label === '?:' ? 3 : (t.cost || 1);
+    if (c + cost > budget) break;
+    c += cost; out.push(ids[i]);
+  }
+  return trimTail(out).length;
+}
+function mainBudget() {
+  let b = tokCap();
+  for (const f of G.funcs) if (FUNCS[f] && FUNCS[f].p) b -= tokenCost(G.params[f] || [], TOK);
+  return Math.max(0, b);
+}
+function debtReduce() {
+  const t = effT();
+  let r = t <= 8 ? 0 : t === 9 ? .10 : t === 10 ? .22 : t === 11 ? .36 : t === 12 ? .52 : t === 13 ? .70 : .90;
+  if (G.relicHas('review')) r *= .5;
+  if (G.refactored) r *= 0.7;
+  return r;
+}
+function errChance() { const t = effT(); return t >= 14 ? .30 : t === 13 ? .15 : 0; }
+function isSmelly() { return effT() >= 9; }
+
+/* ---------------------- 2. 数据表 ---------------------- */
+const TOK = {
+  A: { kind: 'var', label: 'A', cost: 1 }, B: { kind: 'var', label: 'B', cost: 1 }, C: { kind: 'var', label: 'C', cost: 1 },
+  PI: { kind: 'const', label: 'PI', val: 3, cost: 1 },
+  MAXINT: { kind: 'const', label: 'MAX_INT', val: 2147483647, cost: 1 },
+  NAN: { kind: 'const', label: 'NaN', val: 0, cost: 1, nan: true },
+  INF: { kind: 'const', label: 'Infinity', val: 0, cost: 1, inf: true },
+  DEAD: { kind: 'const', label: '0xDEAD', val: 57005, cost: 1 },
+  TRUE: { kind: 'const', label: 'true', val: 1, cost: 1 },
+  FALSE: { kind: 'const', label: 'false', val: 0, cost: 1 },
+  c2: { kind: 'const', label: '2', val: 2, cost: 1 },
+  c3: { kind: 'const', label: '3', val: 3, cost: 1 },
+  c4: { kind: 'const', label: '4', val: 4, cost: 1 },
+  c8: { kind: 'const', label: '8', val: 8, cost: 1 },
+  LP: { kind: 'paren', label: '(', cost: 1 }, RP: { kind: 'paren', label: ')', cost: 1 },
+  'op+': { kind: 'op', label: '+', cost: 1 }, 'op-': { kind: 'op', label: '-', cost: 1 },
+  'op*': { kind: 'op', label: '*', cost: 1 }, 'op/': { kind: 'op', label: '/', cost: 1 },
+  'op%': { kind: 'op', label: '%', cost: 1 }, 'op**': { kind: 'op', label: '**', cost: 1 },
+  'op<<': { kind: 'op', label: '<<', cost: 1 }, 'op>>': { kind: 'op', label: '>>', cost: 1 },
+  'op&': { kind: 'op', label: '&', cost: 1 }, 'op|': { kind: 'op', label: '|', cost: 1 },
+  'op^': { kind: 'op', label: '^', cost: 1 }, 'op~': { kind: 'op', label: '~', cost: 1 },
+  'op!': { kind: 'op', label: '!', cost: 1 }, 'op?:': { kind: 'op', label: '?:', cost: 3 }
+};
+const OPIDS = ['op+', 'op-', 'op*', 'op/', 'op%', 'op**', 'op<<', 'op>>', 'op&', 'op|', 'op^', 'op~', 'op!', 'op?:'];
+const BINOPS = ['op+', 'op-', 'op*', 'op/', 'op%', 'op**', 'op<<', 'op>>', 'op&', 'op|', 'op^', 'op?:'];
+
+const FUNCS = {
+  defend: { name: 'defend(x)', mem: 2, p: 1, desc: '获得 x 点护盾（回合末衰减 50%）' },
+  crit: { name: 'crit(x)', mem: 3, p: 1, desc: '本回合伤害 ×2.5；x 为奇数时 ×3.5' },
+  sleep: { name: 'sleep(n)', mem: 1, p: 1, desc: '本回合伤害 0，回复 n×8 HP（n 上限 3）' },
+  gc: { name: 'gc()', mem: 3, p: 0, desc: '回复 6 内存，清除内存泄漏；每场 2 次' },
+  log: { name: 'log(x)', mem: 0, p: 1, desc: '无战斗效果。每场首次使用 +2 内存' },
+  refactor: { name: 'refactor()', mem: 4, p: 0, desc: '清空敌人护甲，本场技术债 −2' },
+  map: { name: 'map(f,list)', mem: 4, p: 1, desc: '附加伤害 = x × 已解锁变量数' },
+  filter: { name: 'filter(f,list)', mem: 3, p: 1, desc: '附加伤害 = x × 变量数 × 0.75' },
+  reduce: { name: 'reduce(f,list)', mem: 5, p: 1, desc: '附加伤害 = x × 变量数 × 1.5' },
+  recursive: { name: 'recursive(n)', mem: 6, p: 1, desc: '伤害 ^n（n 上限 3）。注意溢出' },
+  tryCatch: { name: 'tryCatch()', mem: 3, p: 0, desc: '本回合免疫报错与代码破坏' },
+  memo: { name: 'memo(x)', mem: 4, p: 1, desc: '记录本场最高值，之后每回合附加 60%' },
+  throwf: { name: 'throw(x)', mem: 5, p: 1, desc: '直接造成 x 伤害，无视护甲与减伤' }
+};
+const RELICS = {
+  unsigned: { name: '无符号整型 unsigned', desc: '溢出改为 mod 2³²（不再回血）' },
+  bigint: { name: 'BigInt', desc: '移除 INT_MAX 上限，但伤害 ×0.6' },
+  limiter: { name: '精准限流器', desc: '伤害自动 clamp 到 INT_MAX，超出部分的 10% 转护盾' },
+  duck: { name: '橡皮鸭', desc: '每场首次报错改为伤害 ×1.5' },
+  socard: { name: 'Stack Overflow 会员卡', desc: '每场可复制敌人 1 个 token（战斗后归还）' },
+  keyboard: { name: '机械键盘', desc: '键盘输入模式伤害 ×1.15' },
+  caffeine: { name: '咖啡因', desc: '内存回复 +1/回合，每回合开始 −2 HP' },
+  unittest: { name: '单元测试', desc: '本场第一次致命伤改为保留 1 HP' },
+  cicd: { name: 'CI/CD 流水线', desc: '每场第 1 回合伤害 ×3' },
+  review: { name: '代码审查豁免券', desc: '技术债减伤减半' },
+  dualscreen: { name: '双屏显示器', desc: 'Token 预算 +1' },
+  vim: { name: 'Vim 键位', desc: '键盘模式额外 +1 Token 预算' },
+  o2: { name: '-O2 编译优化', desc: '每 3 回合自动重排为局部最优（提示）' },
+  git: { name: 'Git 回滚', desc: '每场一次：撤销敌人对你代码的全部破坏' },
+  ghostdep: { name: '幽灵依赖', desc: '每场借用 1 个未解锁函数（内存 +1）' },
+  proddirect: { name: '生产环境直连', desc: '伤害 ×2，每回合 20% 概率自伤 1%' }
+};
+
+/* ---- 敌人 ---- */
+const A1 = [' ┌───────┐ ', ' │ ◉   ◉ │ ', ' │  ───  │ ', ' └──┬┬──┘ ', '   ╱  ╲   '];
+const A2 = ['  ╔═══╗   ', '  ║ ✕ ║   ', '  ╚═╤═╝   ', '    ┴     ', '  (null)  '];
+const A3 = [' ▓▓▓▓▓▓▓ ', ' ▓ ▒▒▒▒ ▓ ', ' ▓▓▒▒▒▒▓▓ ', ' ▓▓▓▓▓▓▓▓ ', '  leak... '];
+const A4 = [' ⟳ ⟳ ⟳ ', ' ╭─────╮ ', ' │ ⟳⟳⟳ │ ', ' ╰─────╯ ', ' ↻ ↻ ↻ '];
+const A5 = [' ┌─────┐ ', ' │ ✎ ? │ ', ' └──┬──┘ ', '  change  ', '  ──▶    '];
+const A6 = [' ▛▀▀▀▀▀▜ ', ' ▌▓▒░ ▓▌ ', ' ▌ 1998 ▌ ', ' ▙▄▄▄▄▄▟ ', ' legacy   '];
+const A7 = [' ┌─┐ ┌─┐ ', ' │?│ │?│ ', ' └─┘ └─┘ ', '  race!   ', ' ⚡    ⚡ '];
+const A8 = ['  "A"    ', ' ┌─────┐ ', ' │ ≡≡≡ │ ', ' └─────┘ ', ' coercion '];
+const A9 = [' ▄▄▄▄▄▄▄ ', ' ███████ ', ' ▀▀▀▀▀▀▀ ', ' ███████ ', '  stack   '];
+const A10 = [' ┌─────┐ ', ' │ ✝ ✝ │ ', ' │ ▒▒▒ │ ', ' └─────┘ ', '  zombie  '];
+const A11 = [' ⊣──┬──⊢ ', ' │  ⊗  │ ', ' ├──┼──┤ ', ' │  ⊗  │ ', '  deadlock'];
+const A12 = [' ┌─────┐ ', ' │2^31 │ ', ' │ ███ │ ', ' └─────┘ ', ' overflow '];
+const B1 = ['  ╔═══════════╗  ', '  ║ ▓ ░ ▓ ░ ▓ ║  ', '  ║  SEGMENT  ║  ', '  ║ ░ ▓ ░ ▓ ░ ║  ', '  ╚═════╤═════╝  ', '     core dumped '];
+const B2 = [' ┌──┐┌──┐┌──┐┌──┐', ' │▓▓││░░││▓▓││░░│', ' └┬─┘└┬─┘└┬─┘└┬─┘', '  └───┼──┼───┘   ', '    ┌─┴──┴─┐     ', '   DISTRIBUTED   '];
+const B3 = ['  ▄▄▄▄▄▄▄▄▄▄▄▄▄  ', '  █ SEV-1 🔥 █  ', '  █ ▓▓ ░░ ▓▓ █  ', '  █  PAGER  █  ', '  ▀▀▀▀▀▀▀▀▀▀▀▀▀  ', '  PRODUCTION     '];
+
+const EN = {
+  m1: {
+    name: 'Off-by-One', art: A1, hpMul: .8, dmg: .55,
+    turn(t, e, g) {
+      const l = 3 - (t % 4), d = Math.max(1, Math.round(bd(g) * .34) * 3);
+      if (l <= 0) return { kind: 'attack', dmg: d, text: 'NOW: attack ' + d };
+      return { kind: 'charge', text: 'COUNTDOWN: ' + l };
+    }, note: '差一错误：倒计时 3 回合后造成 3 倍伤害'
+  },
+  m2: {
+    name: 'NullPointerException', art: A2, hpMul: 1, dmg: 1,
+    turn(t, e, g) {
+      if (t % 3 === 2) return { kind: 'break', btype: 'null_var', text: 'NEXT: null(A)' };
+      return { kind: 'attack', dmg: Math.round(bd(g) * e.dmg), text: 'attack ' + Math.round(bd(g) * e.dmg) };
+    }, note: '每 3 回合把你的一个变量置空'
+  },
+  m3: {
+    name: 'Memory Leak', art: A3, hpMul: 1.2, dmg: .5,
+    turn(t, e, g) { return { kind: 'break', btype: 'leak', text: 'NEXT: leak(2)  mem→' + Math.max(0, G.memMax - 2) }; },
+    note: '每回合永久占用 2 点内存上限'
+  },
+  m4: {
+    name: 'Infinite Loop', art: A4, hpMul: .9, dmg: 1,
+    turn(t, e, g) {
+      const base = Math.max(1, Math.round(bd(g) * .34));
+      const d = Math.round(base * Math.pow(1.5, Math.min(t, 8)));
+      if (t >= 5) return { kind: 'attack', dmg: base * 999, pierce: true, text: 'FATAL: ' + fmt(base * 999) + ' (pierce)' };
+      return { kind: 'attack', dmg: d, text: 'LOOP ×1.5 → ' + d };
+    }, note: '伤害每回合 ×1.5，第 6 回合团灭'
+  },
+  m5: {
+    name: 'Requirement Change', art: A5, hpMul: 1.1, dmg: 1,
+    turn(t, e, g) {
+      if (t % 2 === 1) return { kind: 'break', btype: 'replace_op', text: 'NEXT: refactor(op) // ???' };
+      return { kind: 'attack', dmg: Math.round(bd(g) * e.dmg), text: 'attack ' + Math.round(bd(g) * e.dmg) };
+    }, note: '每 2 回合随机替换你的一个运算符'
+  },
+  m6: {
+    name: 'Legacy Code', art: A6, hpMul: 1.6, dmg: 1, armor: .9,
+    turn(t, e, g) {
+      if (t % 4 === 3) return { kind: 'attack', dmg: Math.round(bd(g) * e.dmg * 1.5), text: 'attack ' + Math.round(bd(g) * e.dmg * 1.5) };
+      return { kind: 'buff', text: 'ARMOR 90% // no tests', sub: 'do not touch' };
+    }, note: '固定 90% 减伤，需 refactor() 或 throw() 破防'
+  },
+  m7: {
+    name: 'Race Condition', art: A7, hpMul: 1, dmg: 1,
+    turn(t, e, g) {
+      const isBrk = Math.random() < .5;
+      e.lie = Math.random() < .5;
+      const real = isBrk ? { kind: 'break', btype: 'freeze', text: 'NEXT: freeze(token)' } : { kind: 'attack', dmg: Math.round(bd(g) * e.dmg), text: 'attack ' + Math.round(bd(g) * e.dmg) };
+      const fake = isBrk ? { kind: 'attack', dmg: Math.round(bd(g) * e.dmg), text: 'attack ' + Math.round(bd(g) * e.dmg) } : { kind: 'break', btype: 'freeze', text: 'NEXT: freeze(token)' };
+      e.pending = real; e.shown = e.lie ? fake : real;
+      return e.shown;
+    }, note: '公示的意图有 50% 是假的'
+  },
+  m8: {
+    name: 'Type Coercion', art: A8, hpMul: 1, dmg: 1,
+    turn(t, e, g) {
+      if (t % 2 === 1) return { kind: 'break', btype: 'str_var', text: 'NEXT: "A" + ""' };
+      return { kind: 'attack', dmg: Math.round(bd(g) * e.dmg), text: 'attack ' + Math.round(bd(g) * e.dmg) };
+    }, note: '每 2 回合把一个变量变成字符串（值 = 位数）'
+  },
+  m9: {
+    name: 'Stack Overflow', art: A9, hpMul: 1.3, dmg: 1, stack: true,
+    turn(t, e, g) {
+      if ((e.st || 0) >= 8) { e.st = 0; return { kind: 'attack', dmg: Math.round(bd(g) * e.dmg) * 8, pierce: true, text: 'STACK DUMP: ' + fmt(Math.round(bd(g) * e.dmg) * 8) }; }
+      return { kind: 'buff', text: 'STACK: ' + (e.st || 0) + '/8', sub: '你每调用 1 次函数 +1 层' };
+    }, note: '你每调用 1 次函数叠 1 层，8 层爆炸'
+  },
+  m10: {
+    name: 'Zombie Process', art: A10, hpMul: 1.1, dmg: 1, revive: true,
+    turn(t, e, g) {
+      if (e.zombie) return { kind: 'break', btype: 'steal', text: 'NEXT: kill -9 (steal 1 token slot)' };
+      return { kind: 'attack', dmg: Math.round(bd(g) * e.dmg), text: 'attack ' + Math.round(bd(g) * e.dmg) };
+    }, note: '死亡后以 40% HP 复活一次，并偷走 1 点 Token 预算'
+  },
+  m11: {
+    name: 'Deadlock', art: A11, hpMul: 1.4, dmg: 1, elite: true,
+    turn(t, e, g) {
+      const ph = t % 5;
+      if (ph === 2) return { kind: 'buff', text: 'DEADLOCK: LOCKED', sub: '先动的一方受双倍伤害', lock: true };
+      if (ph === 3) return { kind: 'buff', text: 'DEADLOCK: LOCKED', sub: '双方静止', lock: true };
+      if (ph === 4) return { kind: 'attack', dmg: Math.round(bd(g) * e.dmg * 2), pierce: true, text: 'UNLOCK: ' + Math.round(bd(g) * e.dmg * 2) + ' (pierce)' };
+      return { kind: 'attack', dmg: Math.round(bd(g) * e.dmg), text: 'attack ' + Math.round(bd(g) * e.dmg) };
+    }, note: '第 3–4 回合双方静止，先动者受双倍伤害'
+  },
+  m12: {
+    name: 'Integer Overflow', art: A12, hpMul: 1.2, dmg: 1, elite: true,
+    turn(t, e, g) {
+      if (t % 3 === 2) return { kind: 'attack', dmg: Math.round(bd(g) * e.dmg), text: 'attack ' + Math.round(bd(g) * e.dmg) };
+      return { kind: 'break', btype: 'induce', text: 'NEXT: +A (free!) // trust me' };
+    },
+    note: '每回合给你的表达式临时 +A，诱导你溢出'
+  },
+  b1: {
+    name: 'Segmentation Fault', art: B1, boss: 1, hp: 8600, dmg: 1.6,
+    turn(t, e, g) {
+      const p2 = e.hp < e.maxHp * .5;
+      const per = Math.max(1, Math.round(bd(g) * (p2 ? .65 : .25)));
+      if (p2) {
+        if (t % 2 === 1) return { kind: 'break', btype: 'rm_paren', text: 'SEGV: free(paren)' };
+        return { kind: 'attack', dmg: per, hits: 2, text: 'WRITE: ' + per + ' ×2' };
+      }
+      if (t % 3 === 2) return { kind: 'break', btype: 'freeze', text: 'SEGV: probe[token]' };
+      return { kind: 'attack', dmg: per, hits: 4, text: 'READ: ' + per + ' ×4' };
+    }, note: '阶段2 开始删除你的括号'
+  },
+  b2: {
+    name: 'Distributed Monolith', art: B2, boss: 2, hp: 31500000, dmg: 1,
+    turn(t, e, g) {
+      const ph = e.hp > e.maxHp * .66 ? 0 : e.hp > e.maxHp * .33 ? 1 : 2;
+      const bits = ph === 0 ? 2 : ph === 1 ? 1 : 1 + rnd(3);
+      let mask = 0; const idx = shuffle([0, 1, 2, 3]).slice(0, bits); idx.forEach(i => mask |= (1 << i));
+      e.mask = mask; e.pendingMask = true;
+      let s = ''; for (let i = 3; i >= 0; i--) s += (mask >> i) & 1 ? '1' : '0';
+      const d = Math.round(bd(g) * e.dmg * (1 + ph * .15));
+      const r = t % 3;
+      if (ph >= 1 && r === 1) return { kind: 'break', btype: 'migrate', text: 'MASK: ' + s + ' + migrate(token)' };
+      if (ph >= 2 && r === 2) return { kind: 'break', btype: 'force_sleep', text: 'MASK: ' + s + ' + force sleep' };
+      return { kind: 'attack', dmg: d, text: 'MASK: ' + s + ' / attack ' + d };
+    }, note: '位掩码护甲：伤害的对应二进制位必须为 1'
+  },
+  b3: {
+    name: 'Production Incident', art: B3, boss: 3, hp: 9000000000, dmg: 1,
+    turn(t, e, g) {
+      const ph = e.hp > e.maxHp * .66 ? 1 : e.hp > e.maxHp * .33 ? 2 : 3;
+      e.cap = Math.max(5e7, Math.floor((e.best || 0) * 1.5));
+      if (ph === 1) return { kind: 'break', btype: 'induce', text: 'SEV-1: +A (free!) // trust me' };
+      if (ph === 2) {
+        if (t % 2 === 0) return { kind: 'break', btype: 'steal', text: 'SEV-1: scale_down(your tokens)' };
+        return { kind: 'attack', dmg: Math.round(bd(g) * e.dmg), text: 'attack ' + Math.round(bd(g) * e.dmg) };
+      }
+      return { kind: 'attack', dmg: Math.round(bd(g) * e.dmg), text: 'BREAKER cap ' + fmt(e.cap) + ' / attack ' + Math.round(bd(g) * e.dmg) };
+    }, note: '三阶段：诱导溢出 → 抢 Token → 熔断限伤'
+  }
+};
+function bd(g) { return g.baseDmg; }
+
+/* ---- 每层编队 ---- */
+const FLOORS = {
+  1: { n: [['m1'], ['m1', 'm1']], el: null, boss: null },
+  2: { n: [['m2'], ['m1', 'm2']], el: ['m3'], boss: null },
+  3: { n: [['m2', 'm1'], ['m2', 'm5']], el: ['m3', 'm1'], boss: null },
+  4: { n: [], el: null, boss: 'b1' },
+  5: { n: [['m5', 'm2'], ['m6']], el: ['m4', 'm3'], boss: null },
+  6: { n: [['m7'], ['m5', 'm8']], el: ['m9'], boss: null },
+  7: { n: [['m6', 'm2'], ['m8', 'm8']], el: ['m9', 'm5'], boss: null },
+  8: { n: [], el: null, boss: 'b2' },
+  9: { n: [['m10', 'm7'], ['m11']], el: ['m4', 'm12'], boss: null },
+  10: { n: [['m8', 'm9'], ['m10', 'm5']], el: ['m12', 'm9'], boss: null },
+  11: { n: [['m11'], ['m10', 'm10']], el: ['m12', 'm6'], boss: null },
+  12: { n: [], el: null, boss: 'b3' }
+};
+
+/* ---- 掉落物池 ---- */
+const ITEMS = [
+  // 变量
+  { id: 'vB', cat: 'const', f: 2, r: 'C', name: 'let B', desc: '解锁第二变量 B（初值 = ⌊A×0.5⌋）', get: g => { g.unlocked.push('B'); if (!g.pool.includes('B')) g.pool.push('B'); g.vars.B = Math.floor(g.vars.A * .5); } },
+  { id: 'vC', cat: 'const', f: 7, r: 'R', name: 'let C', desc: '解锁第三变量 C（初值 = ⌊A×0.35⌋）', get: g => { g.unlocked.push('C'); if (!g.pool.includes('C')) g.pool.push('C'); g.vars.C = Math.floor(g.vars.A * .35); } },
+  { id: 'INC', cat: 'const', f: 11, r: 'R', name: 'let A++', desc: '战斗内每回合 A += 1', get: g => { g.autoinA = true; } },
+  // 常量
+  { id: 'PI', cat: 'const', f: 1, r: 'C', name: 'const PI = 3', desc: '常量 3（数学库被砍了）', get: g => addTok('PI') },
+  { id: 'MAXINT', cat: 'const', f: 5, r: 'R', name: 'const MAX_INT', desc: '常量 2147483647，配合 % 永久免疫溢出', get: g => addTok('MAXINT') },
+  { id: 'DEAD', cat: 'const', f: 6, r: 'R', name: 'const 0xDEAD', desc: '常量 57005', get: g => addTok('DEAD') },
+  { id: 'INF', cat: 'const', f: 10, r: 'E', name: 'const Infinity', desc: '值 = 敌人当前 HP 的一半', get: g => addTok('INF') },
+  { id: 'BOOL', cat: 'const', f: 9, r: 'C', name: 'const true / false', desc: '常量 1 与 0，供 ?: 使用', get: g => { addTok('TRUE'); addTok('FALSE'); } },
+  { id: 'NAN', cat: 'const', f: 4, r: 'C', name: 'const NaN', desc: '陷阱：使整个表达式值归 0', get: g => addTok('NAN'), trap: true },
+  { id: 'c3', cat: 'const', f: 1, r: 'C', name: 'const 3', desc: '常量 3', get: g => addTok('c3') },
+  { id: 'c4', cat: 'const', f: 3, r: 'C', name: 'const 4', desc: '常量 4', get: g => addTok('c4') },
+  { id: 'c8', cat: 'const', f: 5, r: 'C', name: 'const 8', desc: '常量 8', get: g => addTok('c8') },
+  // 运算符
+  { id: 'op-', cat: 'op', f: 2, r: 'C', name: '运算符 −', desc: '减法。用于精确压低伤害避免溢出', get: g => addTok('op-') },
+  { id: 'op/', cat: 'op', f: 3, r: 'C', name: '运算符 /', desc: '整除（向下取整）', get: g => addTok('op/') },
+  { id: 'op%', cat: 'op', f: 3, r: 'R', name: '运算符 %', desc: '取模。溢出免疫流核心', get: g => addTok('op%') },
+  { id: 'op**', cat: 'op', f: 4, r: 'E', name: '运算符 **', desc: '幂。爆炸流入口，小心溢出', get: g => addTok('op**') },
+  { id: 'op<<', cat: 'op', f: 5, r: 'R', name: '运算符 <<', desc: '左移 = ×2ⁿ', get: g => addTok('op<<') },
+  { id: 'op>>', cat: 'op', f: 6, r: 'C', name: '运算符 >>', desc: '右移 = ÷2ⁿ，溢出救场', get: g => addTok('op>>') },
+  { id: 'BIT3', cat: 'op', f: 7, r: 'R', name: '位运算 & | ^', desc: '位运算三件套。Boss2 的唯一解', get: g => { addTok('op&'); addTok('op|'); addTok('op^'); } },
+  { id: 'op~', cat: 'op', f: 11, r: 'R', name: '运算符 ~', desc: '位取反', get: g => addTok('op~') },
+  { id: 'op!', cat: 'op', f: 10, r: 'C', name: '运算符 !', desc: '逻辑非 → 0/1', get: g => addTok('op!') },
+  { id: 'op?:', cat: 'op', f: 9, r: 'E', name: '运算符 ?:', desc: '三元（3 token）：HP<50% 时取右侧，否则取左侧', get: g => addTok('op?:') },
+  // 语法
+  { id: 'PAREN', cat: 'syn', f: 2, r: 'R', name: '( ) 括号', desc: '一对括号（各计 1 token）。改变优先级', get: g => { addTok('LP'); addTok('RP'); } },
+  { id: 'PAREN2', cat: 'syn', f: 5, r: 'R', name: '( ) 括号 ×2', desc: '再获得一对括号（冗余，防 Boss1 删除）', get: g => { addTok('LP'); addTok('RP'); g.parenBonus = (g.parenBonus || 0) + 1; } },
+  { id: 'COMMENT', cat: 'syn', f: 3, r: 'R', name: '// 注释', desc: '战斗中可注释 ≤3 个 token，不计入预算（每场限 1 段）', get: g => { g.canComment = true; } },
+  { id: 'REC', cat: 'syn', f: 11, r: 'L', name: 'rec 自引用', desc: '表达式引用自身上回合值，滚雪球', get: g => { g.recOn = true; } },
+  // 函数
+  { id: 'fcrit', cat: 'fn', f: 2, r: 'R', name: '函数 crit(x)', desc: '本回合伤害 ×2.5（x 为奇数则 ×3.5）· 3 内存', get: g => unlockFn('crit') },
+  { id: 'fsleep', cat: 'fn', f: 3, r: 'C', name: '函数 sleep(n)', desc: '本回合伤害 0，回复 n×8 HP · 1 内存', get: g => unlockFn('sleep') },
+  { id: 'fgc', cat: 'fn', f: 3, r: 'R', name: '函数 gc()', desc: '回复 6 内存并清除内存泄漏 · 3 内存 · 每场 2 次', get: g => unlockFn('gc') },
+  { id: 'frefactor', cat: 'fn', f: 4, r: 'E', name: '函数 refactor()', desc: '清空敌人护甲，本场技术债 −2 · 4 内存', get: g => unlockFn('refactor') },
+  { id: 'fmap', cat: 'fn', f: 5, r: 'R', name: '函数 map(f,list)', desc: '附加伤害 = x × 变量数 · 4 内存', get: g => unlockFn('map') },
+  { id: 'ffilter', cat: 'fn', f: 6, r: 'R', name: '函数 filter(f,list)', desc: '附加伤害 = x × 变量数 × 0.75 · 3 内存', get: g => unlockFn('filter') },
+  { id: 'freduce', cat: 'fn', f: 7, r: 'E', name: '函数 reduce(f,list)', desc: '附加伤害 = x × 变量数 × 1.5 · 5 内存', get: g => unlockFn('reduce') },
+  { id: 'frec', cat: 'fn', f: 8, r: 'L', name: '函数 recursive(n)', desc: '伤害 ^n（n≤3）· 6 内存 · 极高溢出风险', get: g => unlockFn('recursive') },
+  { id: 'ftry', cat: 'fn', f: 9, r: 'E', name: '函数 tryCatch()', desc: '本回合免疫报错与代码破坏 · 3 内存', get: g => unlockFn('tryCatch') },
+  { id: 'fmemo', cat: 'fn', f: 10, r: 'E', name: '函数 memo(x)', desc: '记录本场最高值，之后每回合附加 60% · 4 内存', get: g => unlockFn('memo') },
+  { id: 'fthrow', cat: 'fn', f: 12, r: 'L', name: '函数 throw(x)', desc: '直接造成 x 伤害，无视护甲与减伤 · 5 内存', get: g => unlockFn('throwf') },
+  // 遗物
+  { id: 'rduck', cat: 'rel', f: 2, r: 'C', name: '橡皮鸭', desc: RELICS.duck.desc, get: g => g.relics.push('duck') },
+  { id: 'rkeyboard', cat: 'rel', f: 1, r: 'C', name: '机械键盘', desc: RELICS.keyboard.desc, get: g => g.relics.push('keyboard') },
+  { id: 'rcaffeine', cat: 'rel', f: 3, r: 'R', name: '咖啡因', desc: RELICS.caffeine.desc, get: g => g.relics.push('caffeine') },
+  { id: 'rsocard', cat: 'rel', f: 4, r: 'R', name: 'Stack Overflow 会员卡', desc: RELICS.socard.desc, get: g => g.relics.push('socard') },
+  { id: 'runittest', cat: 'rel', f: 5, r: 'R', name: '单元测试', desc: RELICS.unittest.desc, get: g => g.relics.push('unittest') },
+  { id: 'rcicd', cat: 'rel', f: 6, r: 'R', name: 'CI/CD 流水线', desc: RELICS.cicd.desc, get: g => g.relics.push('cicd') },
+  { id: 'rdual', cat: 'rel', f: 6, r: 'C', name: '双屏显示器', desc: RELICS.dualscreen.desc, get: g => g.relics.push('dualscreen') },
+  { id: 'runsigned', cat: 'rel', f: 7, r: 'E', name: '无符号整型 unsigned', desc: RELICS.unsigned.desc, get: g => g.relics.push('unsigned') },
+  { id: 'rreview', cat: 'rel', f: 8, r: 'E', name: '代码审查豁免券', desc: RELICS.review.desc, get: g => g.relics.push('review') },
+  { id: 'ro2', cat: 'rel', f: 7, r: 'E', name: '-O2 编译优化', desc: RELICS.o2.desc, get: g => g.relics.push('o2') },
+  { id: 'rghost', cat: 'rel', f: 8, r: 'R', name: '幽灵依赖', desc: RELICS.ghostdep.desc, get: g => g.relics.push('ghostdep') },
+  { id: 'rbigint', cat: 'rel', f: 10, r: 'E', name: 'BigInt', desc: RELICS.bigint.desc, get: g => g.relics.push('bigint') },
+  { id: 'rlimit', cat: 'rel', f: 9, r: 'R', name: '精准限流器', desc: RELICS.limiter.desc, get: g => g.relics.push('limiter') },
+  { id: 'rgit', cat: 'rel', f: 10, r: 'E', name: 'Git 回滚', desc: RELICS.git.desc, get: g => g.relics.push('git') },
+  { id: 'rprod', cat: 'rel', f: 11, r: 'L', name: '生产环境直连', desc: RELICS.proddirect.desc, get: g => g.relics.push('proddirect') }
+];
+function addTok(id) { if (!G.pool.includes(id)) G.pool.push(id); }
+function unlockFn(id) { if (!G.funcs.includes(id)) G.funcs.push(id); }
+
+/* ---- 常量强化（动态生成） ---- */
+function boostItems(floor) {
+  const big = floor >= 5;
+  return [
+    { id: 'b1', cat: 'boost', r: 'C', name: 'A += 2', desc: '常量线性提升', dyn: true, get: g => { g.vars.A += 2; log('> let A = ' + g.vars.A, 'lg'); } },
+    { id: 'b2', cat: 'boost', r: 'C', name: 'A = A * 1.25', desc: '常量指数提升（低斜率）', dyn: true, get: g => { g.vars.A = Math.floor(g.vars.A * 1.25); log('> let A = ' + g.vars.A, 'lg'); } },
+    { id: 'b3', cat: 'boost', r: 'R', name: 'A = A * 1.4', desc: '常量指数提升（高斜率）', dyn: true, get: g => { g.vars.A = Math.floor(g.vars.A * 1.4); log('> let A = ' + g.vars.A, 'lg'); } }
+  ];
+}
+
+/* ---- 事件 ---- */
+const EVENTS = [
+  { id: 'e1', name: '代码审查', text: '一位同事在你的 PR 上留了 12 条评论。', opts: [{ t: '删掉 1 个 token，Token 预算 +1', d: '永久 −1 个 token 类型 / +1 预算', run: g => { g.benchRemove = true; g.tokenBonus += 1; } }, { t: '保留，收下 60 金', d: '', run: g => { g.gold += 60; } }] },
+  { id: 'e2', name: '橡皮鸭调试', text: '桌上有一只橡皮鸭。你对它解释了你的代码。', opts: [{ t: '带走橡皮鸭', d: '获得遗物：橡皮鸭', run: g => { g.relics.push('duck'); } }, { t: '拿走一个随机运算符', d: '', run: g => { const o = pick(['op-', 'op/', 'op%', 'op<<', 'op>>', 'op&', 'op|', 'op^']); addTok(o); log('> loot: ' + TOK[o].label, 'lc'); } }] },
+  { id: 'e3', name: '生产环境直连', text: '「反正就改一行，直接上生产吧。」', opts: [{ t: '上！', d: '获得遗物：生产环境直连 · HP −25%', run: g => { g.relics.push('proddirect'); g.hp = Math.max(1, Math.floor(g.hp - g.maxHp * .25)); } }, { t: '离开', d: '什么都没发生', run: g => { } }] },
+  { id: 'e4', name: 'Stack Overflow', text: '一个问题有 4,213 个赞。', opts: [{ t: '复制粘贴', d: '获得遗物：Stack Overflow 会员卡', run: g => { g.relics.push('socard'); } }, { t: '关掉广告，拿 40 金', d: '', run: g => { g.gold += 40; } }] },
+  { id: 'e5', name: '祖传代码库', text: '「这段代码 1998 年写的，没人敢动。」', opts: [{ t: '接手', d: '获得 120 金，但获得 Legacy 诅咒 token（占 1 预算，值 1）', run: g => { g.gold += 120; addTok('NAN'); } }, { t: '拒绝', d: '', run: g => { } }] },
+  { id: 'e6', name: '双屏工位', text: 'IT 给你换了个工位，两块 27 寸。', opts: [{ t: '装上双屏', d: '获得遗物：双屏显示器（Token +1）', run: g => { g.relics.push('dualscreen'); } }, { t: '卖了换钱', d: '获得 80 金', run: g => { g.gold += 80; } }] },
+  { id: 'e7', name: 'Vim vs IDE', text: '同事看你用鼠标拖 token，皱了皱眉。', opts: [{ t: 'Vim', d: '获得遗物：Vim 键位（键盘模式 +1 Token）', run: g => { g.relics.push('vim'); } }, { t: 'IDE', d: '获得 1 个随机语法特性', run: g => { addTok('LP'); addTok('RP'); g.canComment = true; } }] },
+  { id: 'e8', name: '数学库被砍了', text: '「为了体积，我们把 math.h 里的 π 截成了整数。」', opts: [{ t: 'const PI = 3', d: '获得常量 PI（值 3）', run: g => { addTok('PI'); } }, { t: '拿 30 金', d: '', run: g => { g.gold += 30; } }] },
+  { id: 'e9', name: '注释掉', text: '「功能先注释掉，别删，万一还要呢。」', opts: [{ t: '学会注释', d: '解锁 // 注释（每场可注释 ≤3 token）', run: g => { g.canComment = true; } }, { t: '全职休息', d: '回复 40% HP', run: g => { g.hp = Math.min(g.maxHp, g.hp + Math.floor(g.maxHp * .4)); } }] },
+  { id: 'e10', name: '幽灵依赖', text: 'node_modules 里有个包，没人知道它是干嘛的。', opts: [{ t: '装上', d: '获得遗物：幽灵依赖', run: g => { g.relics.push('ghostdep'); } }, { t: '删掉，换个函数', d: '随机解锁 1 个函数', run: g => { unlockFn(pick(['crit', 'gc', 'sleep', 'map', 'filter', 'refactor'])); } }] },
+  { id: 'e11', name: '重构 Sprint', text: '「这两周我们只做重构，不做需求。」', opts: [{ t: '全量重构', d: '表达式重排为当前 token 下局部最优，Token 预算 −1', run: g => { g.tokenBonus -= 1; autoFormat(true); } }, { t: '保持原样', d: '获得 1 个随机遗物', run: g => { g.relics.push(pick(['duck', 'keyboard', 'caffeine', 'unittest', 'review', 'limiter'])); } }] },
+  { id: 'e12', name: 'GitHub Copilot', text: '「我来帮你写吧。」', opts: [{ t: '让它写', d: '本场伤害 +50%，但表达式由引擎生成且不可改', run: g => { g.copilot = true; } }, { t: '拒绝', d: 'A 强化一次', run: g => { g.vars.A = Math.floor(g.vars.A * 1.4); } }] }
+];
+
+/* ---------------------- 3. 游戏状态 ---------------------- */
+const DMG_BASE = [6, 9, 13, 20, 22, 26, 30, 38, 44, 50, 58, 72];
+const PLR_DMG = [5, 98, 200, 784, 3600, 150000, 400000, 3800000, 917e6, 1.77e9, 1.7e9, 1.66e9];
+const HP_CAP = [40, 47, 54, 61, 81, 88, 95, 102, 122, 129, 136, 143];
+const TOKCAP = [6, 6, 7, 7, 8, 9, 9, 10, 11, 11, 12, 12];
+const MEMCAP = [10, 10, 10, 10, 14, 14, 14, 14, 18, 18, 18, 18];
+const MEMREG = [3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5];
+
+const G = {
+  poolMap: TOK,
+  floor: 1, roomIdx: 0, rooms: [], phase: 'menu',
+  hp: 40, maxHp: 40, shield: 0,
+  mem: 10, memMax: 10, memRegen: 3, memBaseMax: 10,
+  pool: ['A'], expr: ['A'], params: {},
+  vars: { A: 5, B: 0, C: 0 }, unlocked: ['A'],
+  funcs: ['defend', 'log'], active: {}, activated: false,
+  relics: [], gold: 0, tokenBonus: 0,
+  frozen: new Set(), nullVars: new Set(), strVars: new Set(), debuffToken: 0,
+  enemies: [], turn: 0, editTarget: 'main',
+  curIntent: {}, induce: false, forceSleep: false, immune: false,
+  refactored: false, cleanCount: 0, lastT: 0,
+  memoVal: 0, gcLeft: 2, logUsed: false, gitUsed: false, duckUsed: false,
+  induceTok: null, socardUsed: false, copilot: false,
+  autoinA: false, recOn: false, canComment: false, commented: 0, commentIdx: -1,
+  prevVal: null, parenBonus: 0, typed: false,
+  tut: 0, dead: false, won: false, kills: 0, stats: { maxT: 0, overflow: 0, refactors: 0, best: 0 }
+};
+G.poolMap = TOK;
+G.relicHas = function (r) { return G.relics.includes(r); };
+function relicHas(r) { return G.relics.includes(r); }
+function tokCap() { return Math.max(3, (TOKCAP[G.floor - 1] || 12) + G.tokenBonus - (G.debuffToken || 0) + (relicHas('dualscreen') ? 1 : 0) + (relicHas('vim') && G.typed ? 1 : 0)); }
+function memCapNow() { return MEMCAP[G.floor - 1] + (relicHas('ghostdep') ? 0 : 0); }
+function curExpr() { return G.editTarget === 'main' ? G.expr : (G.params[G.editTarget] || (G.params[G.editTarget] = [])); }
+function varCount() { return G.unlocked.length; }
+
+/* ---------------------- 日志 ---------------------- */
+function log(s, c) {
+  const d = el('div', c || 'lg', String(s).replace(/</g, '&lt;'));
+  $('#logZone').appendChild(d);
+  $('#logZone').scrollTop = 1e9;
+  while ($('#logZone').children.length > 220) $('#logZone').removeChild($('#logZone').firstChild);
+}
+
+/* ---------------------- 4. 战斗 ---------------------- */
+function makeEnemy(id, isElite) {
+  const d = EN[id];
+  let hp;
+  if (d.boss) hp = d.hp;
+  else hp = Math.round(PLR_DMG[G.floor - 1] * (isElite ? 7 : 3.5) * d.hpMul);
+  return { id, d, name: d.name, art: d.art, hp, maxHp: hp, dmg: d.dmg, armor: d.armor || 0, st: 0, dead: false, zombie: false, best: 0, cap: 0, lie: false, healMul: id === 'm12' ? 2 : (id === 'b3' ? 3 : 1) };
+}
+function startBattle(ids, isElite) {
+  G.phase = 'battle';
+  G.enemies = ids.map(i => makeEnemy(i, isElite));
+  G.turn = 0; G.shield = 0; G.frozen.clear(); G.nullVars.clear();
+  G.immune = false; G.induce = false; G.forceSleep = false;
+  G.memoVal = 0; G.gcLeft = 2; G.active = {}; G.activated = false;
+  G.refactored = false; G.cleanCount = 0; G.lastT = effT();
+  G.debtOffset = 0; G.unitUsed = false; G.duckMul = 0; G._stolen = 0; G.sleepLeft = 3; G.debuffToken = 0;
+  G.memMax = G.memBaseMax; G.mem = G.memMax;
+  G.logUsed = false; G.gitUsed = false; G.duckUsed = false; G.socardUsed = false;
+  G.commented = 0; G.commentIdx = -1; G.prevVal = null;
+  log('> ' + ids.map(i => EN[i].name).join(' + ') + ' spawned', 'lw2');
+  G.enemies.forEach(e => log('  // ' + EN[e.id].note, 'lw2'));
+  genIntents();
+  render();
+}
+function genIntents() {
+  G.enemies.forEach(e => {
+    if (e.dead) return;
+    let it = e.d.turn(G.turn, e, G);
+    if (e.d.id === 'm7' && e.pending) { it = e.shown; }
+    e.cur = it;
+  });
+}
+function alive() { return G.enemies.filter(e => !e.dead); }
+
+function evalCtx(extra) {
+  const vars = {};
+  for (const k of G.unlocked) {
+    let v = G.vars[k] || 0;
+    if (G.nullVars.has(k)) v = 0;
+    if (G.strVars.has(k)) v = String(Math.abs(Math.trunc(v))).length;
+    vars[k] = v;
+  }
+  let commentFrom = -1, commentLen = 0;
+  if (G.commentIdx >= 0) { commentFrom = G.commentIdx; commentLen = 3; }
+  return {
+    vars, frozen: G.frozen, lowHp: G.hp < G.maxHp * .5,
+    infVal: Math.floor((extra || 0) / 2), commentFrom, commentLen
+  };
+}
+function computeDamage(target) {
+  const ctx = evalCtx(target ? target.hp : 0);
+  let budget = tokCap();
+  const pvals = {};
+  for (const f of Object.keys(G.active)) {
+    if (!FUNCS[f] || !FUNCS[f].p) continue;
+    const ids = effBudget(G.params[f] || [], budget);
+    budget -= tokenCost(ids, TOK);
+    pvals[f] = Math.trunc(ev(evalTokens(ids, TOK, ctx).root, ctx));
+  }
+  const r = evalTokens(effBudget(G.expr, budget), TOK, ctx);
+  let v = r.v;
+  if (r.toks.some(t => t.nan)) v = 0;
+  G.unmatched = r.unmatched.length;
+  G.lastRoot = r.root;
+  const detail = { v, extra: 0, throwd: 0, notes: [] };
+  // （参数求值已在上方按共享预算完成）
+  // crit
+  let mul = 1;
+  if (G.active.crit) { const x = Math.abs(pvals.crit || 0); mul *= (x % 2 === 1 ? 3.5 : 2.5); detail.notes.push('crit ×' + mul); }
+  if (G.active.recursive) { const n = clamp(Math.trunc(pvals.recursive || 1), 1, 3); detail.notes.push('recursive ^' + n); detail.recN = n; }
+  if (G.turn === 0 && relicHas('cicd')) { mul *= 3; detail.notes.push('CI/CD ×3'); }
+  if (relicHas('proddirect')) { mul *= 2; detail.notes.push('prod ×2'); }
+  if (G.typed && relicHas('keyboard')) mul *= 1.15;
+  let base = v * mul;
+  // 递归累乘
+  if (detail.recN) { let t = base; for (let i = 1; i < detail.recN; i++) t = cl(t * base); base = t; }
+  // 附加
+  if (G.active.map) detail.extra += (pvals.map || 0) * varCount();
+  if (G.active.filter) detail.extra += (pvals.filter || 0) * varCount() * .75;
+  if (G.active.reduce) detail.extra += (pvals.reduce || 0) * varCount() * 1.5;
+  if (G.active.throwf) detail.throwd += Math.abs(pvals.throwf || 0);
+  if (G.memoVal) detail.extra += Math.floor(G.memoVal * .6);
+  if (G.induce) { base += (G.vars.A || 0); detail.notes.push('induced +' + G.vars.A); }
+  let dmg = cl(base + detail.extra);
+  if (relicHas('bigint')) dmg = Math.floor(dmg * .6);
+  // 溢出
+  const cap = relicHas('unsigned') ? 4294967295 : INT_MAX;
+  let over = 0;
+  if (!relicHas('bigint') && dmg > cap) {
+    if (relicHas('unsigned') && dmg > 4294967295) { over = dmg - 4294967295; dmg = cl(dmg % 4294967296); if (dmg > cap) { over = dmg - cap; dmg = cap; } }
+    else if (relicHas('limiter')) { over = dmg - cap; detail.limited = over; dmg = cap; detail.notes.push('limiter: ' + fmt(over) + ' → shield'); }
+    else { over = dmg - cap; detail.overflow = over; dmg = cap; }
+  }
+  detail.dmg = Math.trunc(dmg); detail.over = over; detail.pvals = pvals;
+  return detail;
+}
+function applyDamageTo(e, detail) {
+  let dmg = detail.dmg;
+  // 技术债减伤
+  const dr = debtReduce();
+  dmg = Math.floor(dmg * (1 - dr));
+  // 护甲
+  const armor = (G.active.refactor ? 0 : (e.armor || 0));
+  dmg = Math.floor(dmg * (1 - armor));
+  // Boss2 掩码
+  if (e.d.id === 'b2' && e.mask != null && !G.active.refactor) {
+    let ok = false;
+    for (let i = 0; i < 4; i++) if ((e.mask >> i) & 1) if ((dmg >> i) & 1) ok = true;
+    if (!ok) { dmg = Math.floor(dmg * .1); log('  // bitmask miss — 90% absorbed', 'lw'); }
+  }
+  // Boss3 熔断
+  if (e.d.id === 'b3' && e.hp < e.maxHp * .33) {
+    e.cap = Math.max(5e7, Math.floor((e.best || 0) * 1.5));
+    if (dmg > e.cap) { const ex = dmg - e.cap; e.shieldE = (e.shieldE || 0) + ex; dmg = e.cap; log('  // CIRCUIT BREAKER: ' + fmt(ex) + ' → shield', 'le'); }
+  }
+  // Boss 护盾（熔断转化）
+  if (e.shieldE) {
+    const ab = Math.min(e.shieldE, dmg); e.shieldE -= ab; dmg -= ab;
+    if (ab) log('  // breaker shield absorbed ' + fmt(ab), 'lw');
+  }
+  // Act III 限流
+  if (G.floor >= 9 && !e.d.boss) { const lim = Math.floor(e.maxHp * .3); if (dmg > lim) { log('  // rate limiter: capped at 30% max HP', 'lw'); dmg = lim; } }
+  // 防胶着：30 回合后伤害持续膨胀，保证战斗必然结束
+  if (G.turn > 30) { const k = 1 + (G.turn - 30) * .25; dmg = Math.floor(dmg * k); if (G.turn === 31) log('  // watchdog: 战斗超过 30 回合，伤害开始膨胀', 'lw'); }
+  if (dmg < 0) dmg = 0;
+  // 溢出回血
+  if (detail.limited) { G.shield += Math.floor(detail.limited * .1); }
+  if (detail.over > 0) {
+    const heal = Math.floor(detail.over * (e.healMul || 1));
+    e.hp = Math.min(e.maxHp, e.hp + heal);
+    G.stats.overflow++;
+    log('!! INTEGER OVERFLOW — ' + e.name + ' healed ' + fmt(heal), 'le');
+    dmg = 0; detail.over = 0;
+  }
+  e.best = Math.max(e.best || 0, dmg);
+  e.hp -= dmg;
+  G.stats.best = Math.max(G.stats.best, dmg);
+  // throw 无视一切
+  if (detail.throwd) { e.hp -= detail.throwd; log('> throw() ' + fmt(detail.throwd) + ' — ignores armor', 'lp'); dmg += detail.throwd; }
+  if (G.active.memo) { G.memoVal = Math.max(G.memoVal, detail.v); }
+  e.hurt = true;
+  return dmg;
+}
+function checkDeaths() {
+  for (const e of G.enemies) {
+    if (e.dead) continue;
+    if (e.hp <= 0) {
+      if (e.d.revive && !e.zombie) {
+        e.zombie = true; e.hp = Math.floor(e.maxHp * .4); G.debuffToken = (G.debuffToken || 0) + 1;
+        log('!! ' + e.name + ' revived at ' + fmt(e.hp) + ' HP and stole 1 token slot', 'le');
+        continue;
+      }
+      e.dead = true; e.hp = 0; G.kills++;
+      log('> ' + e.name + ' terminated', 'lg');
+    }
+  }
+}
+function playerTurn() {
+  if (G.phase !== 'battle') return;
+  const tgt = alive()[0];
+  if (!tgt) return;
+  // 报错
+  const ec = errChance();
+  if (ec > 0 && Math.random() < ec) {
+    if (relicHas('duck') && !G.duckUsed) {
+      G.duckUsed = true; log('> RuntimeError — 你对橡皮鸭解释了这段代码. ×1.5', 'lw'); G.duckMul = 1.5;
+    } else { log('!! Runtime Error: 本回合伤害归零（技术债 T=' + effT() + '）', 'le'); endTurn(true); return; }
+  }
+  if (G.forceSleep) { log('> forced sleep(1) — 本回合无法攻击', 'lw'); G.forceSleep = false; endTurn(false); return; }
+  const detail = computeDamage(tgt);
+  if (G.duckMul) { detail.dmg = Math.floor(detail.dmg * G.duckMul); G.duckMul = 0; }
+  if (G.active.defend) {
+    const s = Math.max(0, Math.trunc(detail.pvals.defend || 0));
+    G.shield += s;
+    log('> defend() → +' + fmt(s) + ' 护盾（回合末衰减 50%）', 'lc');
+  }
+  if (G.active.sleep) {
+    const n = clamp(Math.trunc(detail.pvals.sleep || 1), 1, 3);
+    G.hp = Math.min(G.maxHp, G.hp + n * 8);
+    log('> sleep(' + n + ') — 回复 ' + n * 8 + ' HP，本回合不攻击', 'lc');
+  } else if (G.copilot) {
+    const d = Math.floor(detail.dmg * 1.5); tgt.hp -= d; log('> Copilot: ' + fmt(d), 'lp');
+  } else {
+    const dealt = applyDamageTo(tgt, detail);
+    log('> eval → ' + fmt(detail.dmg) + (detail.notes.length ? ' (' + detail.notes.join(', ') + ')' : '') + '  ⇒ ' + fmt(Math.max(0, dealt)) + ' dmg', 'lwh');
+    if (debtReduce() > 0) log('  // code smell: −' + Math.round(debtReduce() * 100) + '% (T=' + effT() + ')', 'lw');
+  }
+  // 栈溢出叠层
+  for (const e of alive()) if (e.d.stack) e.st = (e.st || 0) + Object.keys(G.active).length;
+  checkDeaths();
+  endTurn(false);
+}
+function endTurn(zero) {
+  const tgt = alive()[0];
+  // 技术债：重构奖励
+  const t = effT();
+  if (t >= 10 && G.lastT >= 10 && t <= 8) G.cleanCount = 0;
+  if (t <= 8 && G.lastT >= 10) { G.cleanCount = 1; }
+  else if (t <= 8 && G.cleanCount > 0) G.cleanCount++;
+  if (G.cleanCount === 3 && !G.refactored) {
+    G.refactored = true; G.stats.refactors++;
+    log('>> REFACTORED — 伤害 +30%，免疫 static analysis', 'lp');
+  }
+  if (G.refactored && t > 8) { G.refactored = false; G.cleanCount = 0; }
+  G.stats.maxT = Math.max(G.stats.maxT, t);
+  G.lastT = t;
+  // static analysis
+  if (t >= 10 && !G.refactored && !G.immune && G.turn % 3 === 2) {
+    const idxs = [];
+    G.expr.forEach((id, i) => { if (TOK[id] && TOK[id].kind === 'op') idxs.push(i); });
+    if (idxs.length) {
+      const i = idxs[idxs.length - 1];
+      log('!! Static Analysis: 删除 token ' + TOK[G.expr[i]].label, 'le');
+      G.expr.splice(i, 1);
+    } else if (G.expr.length > 1) { log('!! Static Analysis: 删除 token ' + TOK[G.expr[G.expr.length - 1]].label, 'le'); G.expr.pop(); }
+  }
+  if (!alive().length) { winBattle(); return; }
+  // 敌人行动
+  enemyTurn();
+  if (G.hp <= 0) { loseGame(); return; }
+  // 回合末
+  G.shield = Math.floor(G.shield * .5);
+  G.mem = Math.min(G.memMax, G.mem + G.memRegen + (relicHas('caffeine') ? 1 : 0));
+  G.frozen.clear(); G.nullVars.clear(); G.immune = false; G.induce = false;
+  G.active = {}; G.activated = false;
+  if (G.autoinA) G.vars.A += 1;
+  if (relicHas('caffeine')) G.hp -= 2;
+  if (G.hp <= 0) { loseGame(); return; }
+  G.enemies.forEach(e => { if (e.shieldE) e.shieldE = Math.floor(e.shieldE * .5); });
+  G.turn++;
+  genIntents();
+  if (relicHas('o2') && G.turn % 3 === 0) autoFormat(false);
+  render();
+}
+function enemyTurn() {
+  for (const e of G.enemies) {
+    if (e.dead) continue;
+    let it = e.cur;
+    if (e.d.id === 'm7' && e.pending) it = e.pending;
+    if (!it) continue;
+    if (it.lock) { log('> ' + e.name + ': LOCKED (静止)', 'lw2'); continue; }
+    if (it.kind === 'charge') { log('> ' + e.name + ': ' + it.text, 'lw2'); continue; }
+    if (it.kind === 'buff') { log('> ' + e.name + ': ' + it.text, 'lc'); continue; }
+    if (it.kind === 'break') { log('> ' + e.name + ': ' + it.text, 'lp'); doBreak(it.btype, e); continue; }
+    if (it.kind === 'attack') {
+      const hits = it.hits || 1; let total = 0;
+      for (let i = 0; i < hits; i++) {
+        let d = it.dmg;
+        if (it.pierce) { G.hp -= d; total += d; }
+        else {
+          const ab = Math.min(G.shield, d); G.shield -= ab; d -= ab; G.hp -= d; total += d + ab;
+        }
+      }
+      log('> ' + e.name + ' 造成 ' + fmt(total) + (it.pierce ? ' 穿透伤害' : ' 伤害'), 'le');
+      if (G.hp <= 0 && relicHas('unittest') && !G.unitUsed) {
+        G.unitUsed = true; G.hp = 1; log('>> 单元测试：致命伤改为保留 1 HP', 'lp');
+      }
+    }
+  }
+}
+function doBreak(btype, e) {
+  if (G.immune) { log('  // tryCatch: blocked', 'lp'); return; }
+  const opIdx = () => { const a = []; G.expr.forEach((id, i) => { if (TOK[id] && TOK[id].kind === 'op') a.push(i); }); return a; };
+  const varIdx = () => { const a = []; G.expr.forEach((id, i) => { if (TOK[id] && TOK[id].kind === 'var') a.push(i); }); return a; };
+  switch (btype) {
+    case 'null_var': {
+      const vi = varIdx(); if (!vi.length) { log('  // no variable to null', 'lw2'); break; }
+      const n = TOK[G.expr[pick(vi)]].label; G.nullVars.add(n);
+      log('  // ' + n + ' = null (本回合为 0)', 'le'); break;
+    }
+    case 'leak': G.memMax = Math.max(0, G.memMax - 2); G.mem = Math.min(G.mem, G.memMax); log('  // memory leak: 上限 → ' + G.memMax, 'le'); break;
+    case 'replace_op': {
+      const oi = opIdx(); if (!oi.length) break;
+      const i = pick(oi); const old = TOK[G.expr[i]].label;
+      const avail = BINOPS.filter(o => G.pool.includes(o) || o === 'op+' || o === 'op-');
+      const nid = pick(avail.length ? avail : ['op+']);
+      G.expr[i] = nid; log('  // requirement change: ' + old + ' → ' + TOK[nid].label, 'le'); break;
+    }
+    case 'str_var': {
+      const vi = varIdx(); if (!vi.length) break;
+      const n = TOK[G.expr[pick(vi)]].label; G.strVars.add(n);
+      log('  // ' + n + ' coerced to string: value = ' + String(Math.abs(G.vars[n] || 0)).length, 'le'); break;
+    }
+    case 'freeze': case 'migrate': {
+      if (!G.expr.length) break;
+      const i = rnd(G.expr.length); G.frozen.add(i);
+      log('  // token #' + i + ' (' + TOK[G.expr[i]].label + ') frozen 本回合', 'le'); break;
+    }
+    case 'rm_paren': {
+      const l = G.expr.indexOf('LP'); const r = G.expr.lastIndexOf('RP');
+      if (l >= 0) G.expr.splice(l, 1); if (r >= 0) G.expr.splice(G.expr.indexOf('RP'), 1);
+      log('  // free(paren) — 一对括号被删除', 'le'); break;
+    }
+    case 'steal': {
+      const cur = tokCap(), floorMin = 6;
+      if (cur > floorMin) { const d = Math.min(2, cur - floorMin); G.debuffToken = (G.debuffToken || 0) + d; log('  // scale_down: Token 预算 → ' + tokCap(), 'le'); }
+      else log('  // scale_down: 已在下限', 'lw2');
+      break;
+    }
+    case 'force_sleep': G.forceSleep = true; log('  // 下回合强制 sleep(1)', 'le'); break;
+    case 'induce': G.induce = true; log('  // +A (free!) — 小心溢出', 'le'); break;
+  }
+}
+function winBattle() {
+  G.phase = 'after';
+  log('>>> 战斗胜利', 'lg');
+  if (G.tut === 1) { G.tut = 2; setTimeout(tutStep, 400); return; }
+  if (G.tut === 2) { G.tut = 3; setTimeout(tutStep, 400); return; }
+  if (G.tut === 3 || G.tut === 4) { addTok('LP'); addTok('RP'); setTimeout(tutFinish, 400); return; }
+  const isBoss = G.enemies.some(e => e.d.boss);
+  const isElite = G.enemies.some(e => e.d.elite);
+  const gold = isBoss ? 80 + 10 * G.floor : isElite ? 40 + 5 * G.floor : 12 + 3 * G.floor;
+  G.gold += gold;
+  if (isBoss) {
+    G.maxHp += 20; G.hp = Math.min(G.maxHp, G.hp + 20);
+    if (G.floor === 4) { G.tokenBonus += 1; log('> Token 预算 +1', 'lw'); }
+    if (G.floor === 8) { G.tokenBonus += 1; G.memBaseMax += 4; log('> Token 预算 +1 · 内存上限 +4', 'lw'); }
+    G.vars.A = G.vars.A * 2; log('> let A = ' + G.vars.A + ' (Boss ×2)', 'lg');
+  }
+  if (!isBoss && Math.random() < .25) { G.vars.A += 1; log('> A += 1  →  let A = ' + G.vars.A, 'lg'); }
+  if (G.floor === 3 || G.floor === 6 || G.floor === 10) { G.tokenBonus += 1; log('> Token 预算 +1', 'lw'); }
+  setTimeout(() => { if (isBoss) { if (G.floor >= 12) { winGame(); return; } nextFloorPrep(); } else showReward(isElite); }, 420);
+}
+function loseGame() {
+  G.phase = 'dead'; G.dead = true;
+  if (G.tut === 3) { showSegv(); return; }
+  showDeath();
+}
+
+/* ---------------------- 引导专用敌人 ---------------------- */
+Object.assign(EN, {
+  tut1: { name: 'Off-by-One', art: A1, hpMul: 1, dmg: 1, turn(t, e, g) { const l = 3 - (t % 4); if (l <= 0) return { kind: 'attack', dmg: 6, text: 'NOW: attack 6' }; return { kind: 'charge', text: 'COUNTDOWN: ' + l }; }, note: '倒计时结束后造成 6 点伤害' },
+  tut2: { name: 'Off-by-One', art: A1, hpMul: 1, dmg: 1, turn(t, e, g) { const l = 3 - (t % 4); if (l <= 0) return { kind: 'attack', dmg: 6, text: 'NOW: attack 6' }; return { kind: 'charge', text: 'COUNTDOWN: ' + l }; }, note: '倒计时结束后造成 6 点伤害' },
+  tut3: { name: 'Off-by-One (BOSS)', art: A1, hpMul: 1, dmg: 1, turn(t, e, g) { const l = 3 - (t % 4); if (l <= 0) return { kind: 'attack', dmg: Math.max(6, G.hp + 3), text: 'NOW: attack ' + Math.max(6, G.hp + 3) }; return { kind: 'charge', text: 'COUNTDOWN: ' + l }; }, note: '倒计时结束后造成致命伤害' }
+});
+
+/* ---------------------- 5. 渲染 ---------------------- */
+function renderStatus() {
+  const u = usedTokens(), c = tokCap();
+  const rt = { combat: '战斗', elite: '精英', reward: '奖励', event: '事件', bench: '重构台', rest: '休息', preboss: '强化站', boss: 'BOSS' };
+  const curRoom = G.rooms[G.roomIdx - 1] || '';
+  $('#status').innerHTML =
+    '<div class="st"><span class="lb">HP</span><span class="bar hp"><i style="width:' + Math.max(0, G.hp / G.maxHp * 100) + '%"></i></span><b>' + G.hp + '/' + G.maxHp + '</b></div>' +
+    '<div class="st"><span class="lb">SHIELD</span><span class="bar sh"><i style="width:' + Math.min(100, G.shield / Math.max(1, G.maxHp) * 100) + '%"></i></span><b>' + fmt(G.shield) + '</b></div>' +
+    '<div class="st"><span class="lb">MEM</span><span class="bar mem"><i style="width:' + (G.mem / Math.max(1, G.memMax) * 100) + '%"></i></span><b>' + G.mem + '/' + G.memMax + '</b></div>' +
+    '<div class="st"><span class="lb">TOKEN</span><b style="color:' + (u > c ? 'var(--red)' : (u >= 9 ? 'var(--amber)' : 'var(--green)')) + '">' + u + '/' + c + '</b></div>' +
+    '<div class="st"><span class="lb">FLOOR</span><b id="stFloor">' + G.floor + '/12</b>' + (curRoom ? '<span class="lb">' + rt[curRoom] + '</span>' : '') + '</div>' +
+    '<div class="st"><span class="lb">GOLD</span><b id="stGold">' + G.gold + '</b></div>' +
+    '<div class="st"><span class="lb">A</span><b style="color:#fff">' + G.vars.A + '</b></div>' +
+    '<div class="spacer"></div>' +
+    '<span class="mini" id="btnHelp">? 帮助</span>';
+  const h = $('#btnHelp'); if (h) h.onclick = showHelp;
+}
+function renderEnemies() {
+  const box = $('#enemyList'); box.innerHTML = '';
+  if (!G.enemies.length) { box.innerHTML = '<div style="color:var(--dim);padding:40px">// no process running</div>'; return; }
+  G.enemies.forEach(e => {
+    const d = el('div', 'enemy' + (e.dead ? ' dead' : ''));
+    const art = el('pre', 'art' + (e.d.boss ? ' boss' : '') + (e.hurt ? ' hurt' : ''));
+    art.textContent = e.art.join('\n');
+    e.hurt = false;
+    d.appendChild(art);
+    d.appendChild(el('div', 'ename', e.name + (e.d.boss ? ' [BOSS]' : e.d.elite ? ' [ELITE]' : '')));
+    const bar = el('div', 'ehp');
+    bar.innerHTML = '<i style="width:' + Math.max(0, e.hp / e.maxHp * 100) + '%"></i><b>' + fmt(Math.max(0, e.hp)) + ' / ' + fmt(e.maxHp) + '</b>';
+    d.appendChild(bar);
+    if (e.armor && !G.active.refactor) d.appendChild(el('div', 'armor', 'ARMOR ' + Math.round(e.armor * 100) + '%'));
+    if (e.mask != null && e.d.id === 'b2') {
+      let s = ''; for (let i = 3; i >= 0; i--) s += (e.mask >> i) & 1 ? '1' : '0';
+      d.appendChild(el('div', 'mask', 'BITMASK ' + s));
+    }
+    if (e.d.stack) d.appendChild(el('div', 'mask', 'STACK ' + (e.st || 0) + '/8'));
+    if (e.shieldE) d.appendChild(el('div', 'armor', 'SHIELD ' + fmt(e.shieldE)));
+    if (e.dead) { d.appendChild(el('div', 'intent charge', 'TERMINATED')); }
+    else if (e.cur) {
+      const cls = e.cur.kind === 'break' ? 'break' : e.cur.kind === 'attack' ? '' : e.cur.kind === 'buff' ? 'buff' : 'charge';
+      const it = el('div', 'intent ' + cls, String(e.cur.text) + (e.d.id === 'm7' ? '  // ???' : ''));
+      d.appendChild(it);
+    }
+    box.appendChild(d);
+  });
+}
+function renderTabs() {
+  const t = $('#etabs'); t.innerHTML = '';
+  const mk = (id, label, n) => {
+    const b = el('div', 'etab' + (G.editTarget === id ? ' on' : ''), label + ' <span class="cost">' + n + '</span>');
+    b.onclick = () => { G.editTarget = id; render(); };
+    t.appendChild(b);
+  };
+  mk('main', '主表达式', tokenCost(G.expr, TOK));
+  G.funcs.forEach(f => { if (FUNCS[f] && FUNCS[f].p) mk(f, FUNCS[f].name.replace(/\(.*/, '()'), tokenCost(G.params[f] || [], TOK)); });
+  const tot = el('div', 'etab', 'TOTAL ' + usedTokens() + '/' + tokCap());
+  tot.style.color = usedTokens() > tokCap() ? 'var(--red)' : 'var(--amber)';
+  t.appendChild(tot);
+}
+function renderExpr() {
+  const row = $('#exprRow'); row.innerHTML = '';
+  const ids = curExpr();
+  const cut = cutIndex(ids, mainBudget());
+  for (let i = 0; i <= ids.length; i++) {
+    const g = el('div', 'gap'); g.dataset.i = i; row.appendChild(g);
+    if (i < ids.length) {
+      const tk = TOK[ids[i]]; if (!tk) continue;
+      const b = el('div', 'tk ' + tk.kind + (G.frozen.has(i) ? ' frozen' : '') + (i >= cut ? ' ghost' : ''), tk.label);
+      b.dataset.i = i; b.dataset.src = 'expr';
+      row.appendChild(b);
+    }
+  }
+  if (!ids.length) { const s = el('span', 'traylb', '// 空 — 点击下方托盘 token 或拖拽'); row.appendChild(s); }
+}
+function poolOrder() {
+  const rank = { var: 0, const: 1, op: 2, paren: 3 };
+  return G.pool.slice().sort((a, b) => (rank[TOK[a].kind] - rank[TOK[b].kind]) || TOK[a].label.localeCompare(TOK[b].label));
+}
+function renderTray() {
+  const t = $('#tray'); t.innerHTML = '';
+  t.appendChild(el('span', 'traylb', 'POOL:'));
+  poolOrder().forEach(id => {
+    const d = TOK[id]; if (!d) return;
+    const b = el('div', 'tk ' + d.kind, d.label);
+    b.dataset.pool = id; b.dataset.src = 'tray';
+    b.title = (d.kind === 'const' ? '值 ' + d.val : d.kind === 'var' ? '变量 ' + d.label + ' = ' + (G.vars[d.label] || 0) : '运算符');
+    t.appendChild(b);
+  });
+}
+function renderEval() {
+  const ids = curExpr();
+  const tgt = alive()[0];
+  const r = evalTokens(effBudget(ids, mainBudget()), TOK, evalCtx(tgt ? tgt.hp : 0));
+  let v = r.v; if (r.toks.some(t => t.nan)) v = 0;
+  G.unmatched = r.unmatched.length;
+  const val = $('#evalVal');
+  val.textContent = fmt(v);
+  val.className = v > INT_MAX ? 'bad' : v > INT_MAX * .8 ? 'warn' : '';
+  const dr = debtReduce();
+  $('#evalNote').innerHTML = G.editTarget === 'main'
+    ? '// 技术债 −' + Math.round(dr * 100) + '% ⇒ 实际 <b style="color:#fff">' + fmt(Math.floor(v * (1 - dr))) + '</b>' + (v > INT_MAX ? ' <span style="color:var(--red)">!INT_MAX</span>' : '')
+    : '// 函数参数（不直接造成伤害）';
+  const w = $('#warnBox'); w.innerHTML = '';
+  const T = usedTokens(), C = tokCap();
+  if (T > C) w.appendChild(el('div', 'errline', '// 超出 Token 预算 ' + T + '/' + C + ' — 多余的 token 不会生效'));
+  if (T >= 13) w.appendChild(el('div', 'errline', '// ERROR 区：每回合 ' + Math.round(errChance() * 100) + '% 概率 Runtime Error'));
+  else if (T >= 9) w.appendChild(el('div', 'warnline', '// CODE SMELL：敌人获得 ' + Math.round(dr * 100) + '% 减伤。降到 ≤8 并保持 3 回合可触发 REFACTORED +30%'));
+  if (G.unmatched) w.appendChild(el('div', 'errline', '// ' + G.unmatched + ' 个括号不配对'));
+  if (v > INT_MAX && !relicHas('bigint') && !relicHas('unsigned') && !relicHas('limiter')) w.appendChild(el('div', 'errline', '// SIGFPE: integer overflow — 超出的部分会治疗敌人！'));
+  if (G.refactored) w.appendChild(el('div', 'warnline', '// REFACTORED 生效中：伤害 +30%'));
+  renderTree(r.root);
+}
+function renderTree(root) {
+  const inner = $('#treeInner'), svg = $('#treeLinks');
+  Array.from(inner.querySelectorAll('.tn')).forEach(n => n.remove());
+  $('#treeEmpty').style.display = (root && curExpr().length) ? 'none' : 'flex';
+  if (!root || !curExpr().length) { svg.innerHTML = ''; return; }
+  let cur = 0; const nodes = [], links = [];
+  function walk(n, depth) {
+    if (!n) return null;
+    if (n.k === 'num' || n.k === 'var') { const o = { x: cur++, d: depth, l: n.k === 'num' ? (n.inf ? '∞' : String(n.v)) : n.name + '=' + (G.vars[n.name] || 0), c: n.k }; nodes.push(o); return o; }
+    if (n.k === 'err') { const o = { x: cur++, d: depth, l: '?', c: 'bad' }; nodes.push(o); return o; }
+    const kids = [];
+    if (n.k === 'un') { const a = walk(n.x, depth + 1); if (a) kids.push(a); }
+    else { const a = walk(n.l, depth + 1), b = walk(n.r, depth + 1); if (a) kids.push(a); if (b) kids.push(b); }
+    if (!kids.length) { const o = { x: cur++, d: depth, l: '?', c: 'bad' }; nodes.push(o); return o; }
+    const o = { x: (kids[0].x + kids[kids.length - 1].x) / 2, d: depth, l: n.op, c: 'op' };
+    nodes.push(o); kids.forEach(k => links.push([o, k])); return o;
+  }
+  walk(root, 0);
+  const W = 54, H = 26;
+  nodes.forEach(n => {
+    const d = el('div', 'tn ' + n.c + (n.c === 'op' ? '' : ''), n.l);
+    d.style.left = (n.x * W + 6) + 'px'; d.style.top = (n.d * H + 6) + 'px';
+    if (n.l.length > 6) d.style.fontSize = '10px';
+    inner.appendChild(d);
+  });
+  let s = '';
+  links.forEach(([a, b]) => {
+    s += '<line x1="' + (a.x * W + 28) + '" y1="' + (a.d * H + 26) + '" x2="' + (b.x * W + 28) + '" y2="' + (b.d * H + 6) + '" stroke="#0F5C22" stroke-width="1"/>';
+  });
+  svg.innerHTML = s;
+  svg.setAttribute('width', Math.max(300, cur * W + 20)); svg.setAttribute('height', 120);
+  inner.style.minWidth = (cur * W + 20) + 'px';
+}
+function renderFns() {
+  const row = $('#fnRow'); row.innerHTML = '';
+  G.funcs.forEach(f => {
+    const fd = FUNCS[f]; if (!fd) return;
+    const on = !!G.active[f];
+    const canUse = G.mem >= fd.mem;
+    const b = el('div', 'fn' + (on ? ' on' : '') + (canUse || on ? '' : ' no'),
+      fd.name + ' <span class="m">' + fd.mem + 'M</span>' + (fd.p ? ' <span class="m">[' + tokenCost(G.params[f] || [], TOK) + 't]</span>' : ''));
+    b.title = fd.desc;
+    b.onclick = () => {
+      if (on) { delete G.active[f]; G.mem += fd.mem; log('> ' + fd.name + ' 取消', 'lw2'); }
+      else if (f === 'sleep' && G.sleepLeft <= 0) { log('// sleep 本场次数已用尽（3 次）', 'lw'); }
+      else if (G.mem >= fd.mem) {
+        if (f === 'sleep') G.sleepLeft--;
+        G.active[f] = true; G.mem -= fd.mem;
+        log('> ' + fd.name + ' 激活 (−' + fd.mem + ' mem)', 'lp');
+        if (f === 'gc') { if (G.gcLeft > 0) { G.gcLeft--; G.mem = Math.min(G.memMax, G.mem + 6); G.memMax = Math.min(G.memBaseMax, G.memMax + 2); log('  gc: +6 mem', 'lc'); } }
+        if (f === 'log' && !G.logUsed) { G.logUsed = true; G.mem += 2; log('  > log: ' + fmt(evalTokens(G.params[f] || [], TOK, evalCtx(0)).v), 'lc'); }
+        if (f === 'refactor') { G.enemies.forEach(e => { if (e.armor) { e.armor = 0; log('  refactor: 护甲清零', 'lc'); } }); G.debtOffset = 2; log('  refactor: 技术债 −2', 'lc'); }
+        if (f === 'tryCatch') G.immune = true;
+        if (f === 'sleep') { }
+      } else log('// 内存不足', 'lw');
+      render();
+    };
+    row.appendChild(b);
+  });
+}
+function renderActions() {
+  const row = $('#actRow'); row.innerHTML = '';
+  const b = el('button', 'act', 'EXECUTE (SPACE)');
+  b.onclick = playerTurn;
+  b.disabled = G.phase !== 'battle';
+  row.appendChild(b);
+  const k = el('button', 'act ghost', '⌨ 键盘输入');
+  k.onclick = keyboardInput; row.appendChild(k);
+  const a = el('button', 'act ghost', 'Tab 自动格式化');
+  a.onclick = () => autoFormat(true); row.appendChild(a);
+  if (relicHas('git') && !G.gitUsed) {
+    const g = el('button', 'act ghost', '⟲ Git 回滚');
+    g.onclick = () => {
+      G.gitUsed = true; G.frozen.clear(); G.strVars.clear(); G.nullVars.clear();
+      G.memMax = G.memBaseMax; G.tokenBonus += (G._stolen || 0); G._stolen = 0;
+      log('>> git checkout . — 代码破坏已撤销', 'lp'); render();
+    };
+    row.appendChild(g);
+  }
+  if (G.canComment && G.commentIdx < 0 && G.phase === 'battle') {
+    const c = el('button', 'act ghost', '// 注释 3 token');
+    c.onclick = () => { G.commentIdx = G.expr.length - 3; if (G.commentIdx < 0) G.commentIdx = 0; G.commented = 3; log('> 注释已启用（本场 1 次）', 'lc'); render(); };
+    row.appendChild(c);
+  }
+}
+function render() {
+  renderStatus(); renderEnemies(); renderTabs(); renderExpr(); renderTray(); renderEval(); renderFns(); renderActions();
+}
+
+/* ---------------------- 键盘输入 ---------------------- */
+function numTok(n) {
+  const id = 'n' + n;
+  if (!TOK[id]) { TOK[id] = { kind: 'const', label: n, val: parseInt(n, 10), cost: 1 }; }
+  if (!G.pool.includes(id)) G.pool.push(id);
+  return id;
+}
+function parseInput(s) {
+  s = s.replace(/\s+/g, '');
+  const ids = []; let i = 0;
+  while (i < s.length) {
+    if (s.substr(i, 2) === 'PI') { if (G.pool.includes('PI')) ids.push('PI'); i += 2; continue; }
+    const c = s[i];
+    if (/[A-C]/.test(c)) { if (G.unlocked.includes(c)) ids.push(c); i++; continue; }
+    if (/[0-9]/.test(c)) { let n = ''; while (i < s.length && /[0-9]/.test(s[i])) { n += s[i]; i++; } ids.push(numTok(n)); continue; }
+    const two = s.substr(i, 2);
+    if (['**', '<<', '>>', '?:'].indexOf(two) >= 0) { ids.push('op' + two); i += 2; continue; }
+    if ('+-*/%&|^~!'.indexOf(c) >= 0) { ids.push('op' + c); i++; continue; }
+    if (c === '(') { ids.push('LP'); i++; continue; }
+    if (c === ')') { ids.push('RP'); i++; continue; }
+    i++;
+  }
+  return ids;
+}
+function keyboardInput() {
+  const s = prompt('输入表达式（例：(A+A)*3 ）\n可用变量：' + G.unlocked.join(',') + '  可用运算符见托盘', G.expr.map(i => TOK[i].label).join(''));
+  if (s == null) return;
+  const ids = parseInput(s);
+  if (!ids.length) { log('// 无法解析', 'lw'); return; }
+  curExpr().length = 0; ids.forEach(x => curExpr().push(x));
+  G.typed = true;
+  log('> typed: ' + ids.map(i => TOK[i].label).join(' '), 'lc');
+  render();
+}
+
+/* ---------------------- 自动格式化 ---------------------- */
+function autoFormat(apply) {
+  const cap = (G.editTarget === 'main' ? mainBudget() : tokCap()), V = G.unlocked[0], B = G.unlocked[1];
+  const cands = [];
+  const push = ids => { if (ids.every(x => G.pool.includes(x)) && tokenCost(ids, TOK) <= cap) cands.push(ids); };
+  push([V]); push([V, 'op+', V]); push([V, 'op+', V, 'op+', V]); push([V, 'op*', V]);
+  push(['LP', V, 'op+', V, 'RP', 'op*', V]);
+  push(['LP', V, 'op+', V, 'RP', 'op*', 'LP', V, 'op+', V, 'RP']);
+  push(['LP', V, 'op*', V, 'RP', 'op*', V]);
+  push(['LP', V, 'op*', V, 'RP', 'op*', 'LP', V, 'op*', V, 'RP']);
+  push(['LP', V, 'op+', V, 'RP', 'op**', 'c2']);
+  push([V, 'op**', 'c3']); push([V, 'op**', 'c4']); push([V, 'op<<', 'c4']); push([V, 'op<<', 'c3']);
+  push(['LP', V, 'op+', V, 'RP', 'op*', 'c3']);
+  push(['LP', V, 'op*', V, 'RP', 'op*', 'LP', V, 'op+', V, 'RP']);
+  push(['LP', V, 'op*', V, 'RP', 'op*', V, 'op<<', 'c4']);
+  push(['LP', V, 'op*', V, 'RP', 'op*', 'LP', V, 'op+', V, 'RP', 'op<<', 'c3']);
+  push(['LP', V, 'op*', V, 'RP', 'op*', 'LP', V, 'op+', V, 'RP', 'op>>', 'c2']);
+  if (B) { push([V, 'op+', B]); push(['LP', V, 'op+', B, 'RP', 'op*', V]); push(['LP', V, 'op+', B, 'RP', 'op*', 'LP', V, 'op+', B, 'RP']); push([V, 'op*', B]); push(['LP', V, 'op*', B, 'RP', 'op*', 'LP', V, 'op+', B, 'RP']); }
+  const q = [V, 'op*', V, 'op*', V, 'op*', V];
+  push(q);
+  ['op>>', 'op/', 'op<<'].forEach(sh => { ['c2', 'c3', 'c4', 'c8'].forEach(c => { push(q.concat([sh, c])); }); });
+  ['op+', 'op-', 'op%'].forEach(sh => { ['c2', 'c3', 'c4', 'c8'].forEach(c => { push(q.concat([sh, c])); }); });
+  let best = null, bv = -1;
+  const capOk = relicHas('bigint') ? Infinity : (relicHas('unsigned') ? 4294967295 : INT_MAX);
+  for (const c of cands) {
+    const r = evalTokens(c, TOK, evalCtx(alive()[0] ? alive()[0].hp : 0));
+    let v = r.v; if (r.toks.some(t => t.nan)) v = 0;
+    if (v > capOk || v < 0) continue;
+    const dr = debtReduce();
+    const score = Math.floor(v * (1 - dr));
+    if (score > bv) { bv = score; best = c; }
+  }
+  if (!best) { log('// 没有更优解', 'lw2'); return; }
+  const str = best.map(i => TOK[i].label).join(' ');
+  if (apply) { curExpr().length = 0; best.forEach(x => curExpr().push(x)); log('> auto-format → ' + str + ' = ' + fmt(bv), 'lc'); render(); }
+  else log('// -O2 建议：' + str + ' = ' + fmt(bv), 'lc');
+}
+
+/* ---------------------- overlay ---------------------- */
+function overlay(title, sub, html, opts, noClose) {
+  const c = $('#card');
+  c.innerHTML = '<h2>' + title + '</h2><div class="sub">' + (sub || '') + '</div>' + (html || '');
+  const box = el('div', 'opts'); c.appendChild(box);
+  (opts || []).forEach(o => {
+    const d = el('div', 'opt');
+    d.innerHTML = '<div class="t">' + o.t + '</div><div class="d">' + (o.d || '') + '</div>' + (o.r ? '<div class="r r' + o.r + '">' + o.r + '</div>' : '');
+    d.onclick = () => { if (!noClose) hideOverlay(); o.run && o.run(); };
+    box.appendChild(d);
+  });
+  $('#overlay').classList.add('on');
+}
+function hideOverlay() { $('#overlay').classList.remove('on'); }
+function rarityCls(r) { return r; }
+
+/* ---------------------- 奖励 / 事件 / 房间 ---------------------- */
+function poolFor() {
+  let p = ITEMS.filter(i => i.f <= G.floor && !G.owned[i.id]);
+  return p.concat(boostItems(G.floor));
+}
+function weightOf(r) {
+  const f = G.floor;
+  if (f <= 4) return r === 'C' ? 70 : r === 'R' ? 28 : r === 'E' ? 2 : 0;
+  if (f <= 8) return r === 'C' ? 40 : r === 'R' ? 45 : r === 'E' ? 14 : 1;
+  return r === 'C' ? 15 : r === 'R' ? 40 : r === 'E' ? 35 : 10;
+}
+function rollChoices(n, forceRare) {
+  const p = poolFor(); if (!p.length) return boostItems(G.floor).slice(0, n);
+  const out = [], cats = {};
+  for (let k = 0; k < 80 && out.length < n; k++) {
+    let tot = 0; p.forEach(i => tot += weightOf(i.r));
+    let x = Math.random() * tot, it = p[0];
+    for (const i of p) { x -= weightOf(i.r); if (x <= 0) { it = i; break; } }
+    if (out.some(o => o.id === it.id && !it.dyn)) continue;
+    if (cats[it.cat] && k < 50) continue;
+    if (forceRare && (it.r === 'C') && k < 50) continue;
+    out.push(it); cats[it.cat] = 1;
+  }
+  let guard = 0;
+  while (out.length < n && guard++ < 40) { const it = pick(p); if (!out.some(o => o.id === it.id && !it.dyn)) out.push(it); }
+  if (!out.some(o => o.dyn)) { out[Math.min(2, out.length - 1)] = pick(boostItems(G.floor)); }
+  return out;
+}
+function showReward(isElite) {
+  const ch = rollChoices(3, isElite);
+  overlay('LOOT DROP — 三选一', '第 ' + G.floor + ' 层' + (isElite ? ' · 精英掉落' : '') + ' · 当前 TOKEN ' + usedTokens() + '/' + tokCap(),
+    '<div class="sub">选择一项永久加入你的 build。类别不重复。</div>',
+    ch.map((it, i) => ({
+      t: it.name, d: it.desc, r: it.r, run: () => { takeItem(it); afterRoom(); }
+    })));
+}
+function takeItem(it) {
+  G.owned = G.owned || {};
+  if (!it.dyn) G.owned[it.id] = 1;
+  it.get(G);
+  log('>>> 获得 ' + it.name, 'lwh');
+  render();
+}
+function showEvent() {
+  const ev = pick(EVENTS);
+  overlay('EVENT — ' + ev.name, '第 ' + G.floor + ' 层', '<div class="sub">' + ev.text + '</div>',
+    ev.opts.map(o => ({ t: o.t, d: o.d, run: () => { o.run(G); log('> ' + ev.name + ': ' + o.t, 'lc'); render(); afterRoom(); } })));
+}
+function showBench() {
+  const removable = G.pool.filter(id => id !== 'A');
+  const html = '<div class="sub">金币 ' + G.gold + ' · 删除垃圾 token / 购买强化</div>' +
+    '<table class="t"><tr><th>删除 token（25 金，每次 +10）</th><th></th></tr>' +
+    removable.map(id => '<tr><td>' + TOK[id].label + '</td><td><span class="kbd" data-del="' + id + '">删除</span></td></tr>').join('') + '</table>' +
+    '<table class="t"><tr><th>商品</th><th>价格</th><th></th></tr>' +
+    '<tr><td>回复 30% HP</td><td>20</td><td><span class="kbd" data-buy="heal">购买</span></td></tr>' +
+    '<tr><td>运算符（下一档）</td><td>45</td><td><span class="kbd" data-buy="op">购买</span></td></tr>' +
+    '<tr><td>函数</td><td>60</td><td><span class="kbd" data-buy="fn">购买</span></td></tr>' +
+    '<tr><td>遗物</td><td>90</td><td><span class="kbd" data-buy="rel">购买</span></td></tr>' +
+    '<tr><td>Token 预算 +1</td><td>150</td><td><span class="kbd" data-buy="tok">购买</span></td></tr></table>';
+  overlay('REFACTOR BENCH — 重构台', '删代码也是写代码', html, [{ t: '离开', d: '', run: () => afterRoom() }]);
+  let cost = 25;
+  $('#card').querySelectorAll('[data-del]').forEach(s => s.onclick = () => {
+    const id = s.dataset.del;
+    if (G.gold < cost) { log('// 金币不足', 'lw'); return; }
+    G.gold -= cost; cost += 10;
+    G.pool = G.pool.filter(x => x !== id);
+    G.expr = G.expr.filter(x => x !== id);
+    log('> 删除 token ' + TOK[id].label + ' (−' + (cost - 10) + '金)', 'lc');
+    hideOverlay(); showBench();
+  });
+  $('#card').querySelectorAll('[data-buy]').forEach(s => s.onclick = () => {
+    const k = s.dataset.buy;
+    const price = { heal: 20, op: 45, fn: 60, rel: 90, tok: 150 }[k];
+    if (G.gold < price) { log('// 金币不足', 'lw'); return; }
+    G.gold -= price;
+    if (k === 'heal') G.hp = Math.min(G.maxHp, G.hp + Math.floor(G.maxHp * .3));
+    if (k === 'op') { const o = poolFor().filter(i => i.cat === 'op'); if (o.length) takeItem(pick(o)); else addTok(pick(['op-', 'op/', 'op%'])); }
+    if (k === 'fn') { const o = poolFor().filter(i => i.cat === 'fn'); if (o.length) takeItem(pick(o)); else unlockFn('crit'); }
+    if (k === 'rel') { const o = poolFor().filter(i => i.cat === 'rel'); if (o.length) takeItem(pick(o)); else G.relics.push('duck'); }
+    if (k === 'tok') { G.tokenBonus += 1; log('> Token 预算 +1', 'lw'); }
+    hideOverlay(); showBench();
+  });
+}
+function showRest() {
+  overlay('REST — 休息', '第 ' + G.floor + ' 层 · HP ' + G.hp + '/' + G.maxHp, '<div class="sub">只能选一项。</div>', [
+    { t: '回复 30% HP', d: '+' + Math.floor(G.maxHp * .3) + ' HP', run: () => { G.hp = Math.min(G.maxHp, G.hp + Math.floor(G.maxHp * .3)); afterRoom(); } },
+    { t: 'HP 上限 +8', d: '永久提升', run: () => { G.hpBonus = (G.hpBonus || 0) + 8; G.maxHp += 8; afterRoom(); } },
+    { t: '整理表达式', d: '自动格式化一次', run: () => { autoFormat(true); afterRoom(); } }
+  ]);
+}
+function afterRoom() {
+  if (G.tut === 5) { G.tut = 6; startFloor(1, 3); return; }
+  nextRoom();
+}
+
+/* ---------------------- 关卡流程 ---------------------- */
+function startFloor(f, fromRoom) {
+  G.floor = f;
+  G.maxHp = (HP_CAP[f - 1] || 143) + (G.hpBonus || 0);
+  G.memBaseMax = MEMCAP[f - 1]; G.memMax = G.memBaseMax; G.memRegen = MEMREG[f - 1];
+  G.baseDmg = DMG_BASE[f - 1];
+  const fd = FLOORS[f];
+  if (fd.boss) G.rooms = ['preboss', 'boss'];
+  else G.rooms = ['combat', Math.random() < .6 ? 'reward' : 'event',
+  (f >= 3 && Math.random() < .3) ? 'elite' : 'combat',
+  (Math.random() < .5 ? 'bench' : Math.random() < .6 ? 'rest' : 'event')];
+  G.roomIdx = fromRoom || 0;
+  G.battleIdx = 0;
+  log('=== FLOOR ' + f + ' ===', 'lw');
+  nextRoom();
+}
+function nextRoom() {
+  if (G.roomIdx >= G.rooms.length) {
+    if (G.floor >= 12) { winGame(); return; }
+    startFloor(G.floor + 1); return;
+  }
+  const rt = G.rooms[G.roomIdx++];
+  const fd = FLOORS[G.floor];
+  if (rt === 'combat' || rt === 'elite') {
+    const list = rt === 'elite' ? (fd.el ? [fd.el] : [fd.n[0]]) : fd.n;
+    const combo = list[G.battleIdx % list.length]; G.battleIdx++;
+    startBattle(combo, rt === 'elite');
+  } else if (rt === 'reward') { showReward(false); }
+  else if (rt === 'event') { showEvent(); }
+  else if (rt === 'bench') { showBench(); }
+  else if (rt === 'rest') { showRest(); }
+  else if (rt === 'preboss') {
+    G.hp = Math.min(G.maxHp, G.hp + Math.floor(G.maxHp * .3)); G.mem = G.memMax;
+    const ch = rollChoices(3, true);
+    overlay('PRE-BOSS — 强化站', '回复 30% HP · 内存已回满 · 必出稀有以上', '', ch.map(it => ({ t: it.name, d: it.desc, r: it.r, run: () => { takeItem(it); nextRoom(); } })));
+  } else if (rt === 'boss') { startBattle([fd.boss], false); }
+}
+
+/* ---------------------- 引导 ---------------------- */
+function tutStep() {
+  if (G.tut === 1) {
+    G.phase = 'battle';
+    log('> 你只有一行代码：let A = 5', 'lg');
+    log('> 它太弱了。看见那个倒计时了吗？', 'lw2');
+    startBattle(['tut1']); G.enemies[0].maxHp = G.enemies[0].hp = 30; render();
+  } else if (G.tut === 2) {
+    addTok('op+');
+    log('> loot drop: [ + ]', 'lwh');
+    log('> 把它拖到 A 和 A 中间。或者点两下托盘。', 'lw2');
+    startBattle(['tut2', 'tut2']); G.enemies.forEach(e => { e.maxHp = e.hp = 20; }); render();
+  } else if (G.tut === 3) {
+    addTok('op*'); addTok('c3');
+    log('> loot drop: [ * ] [ 3 ]', 'lwh');
+    log('> warning: * binds tighter than +', 'lw');
+    startBattle(['tut3']); G.enemies[0].maxHp = G.enemies[0].hp = 62; render();
+  } else if (G.tut === 4) {
+    addTok('LP'); addTok('RP');
+    startBattle(['tut3']); G.enemies[0].maxHp = G.enemies[0].hp = 62;
+    G.hp = G.maxHp; render();
+  }
+}
+function showSegv() {
+  const exprStr = G.expr.map(i => TOK[i].label).join(' ');
+  const meant = '( ' + exprStr.replace(/^A \+ A/, 'A + A') + ' )';
+  G.phase = 'dead';
+  overlay('SEGMENTATION FAULT (core dumped)', '',
+    '<div class="big">' + Math.max(0, G.enemies[0] ? G.enemies[0].hp : 2) + ' HP</div>' +
+    '<div class="segv">You wrote:  ' + exprStr + '\nYou meant:  ( A + A ) * 3\n\n1 + 2 * 3 = 7, not 9.\n* binds tighter than +.</div>' +
+    '<div class="sub">它还活着。你的代码杀了你自己。</div>',
+    [{ t: '按 SPACE 重构', d: '获得 ( ) 一对括号，重来一次', run: () => { G.tut = 4; G.dead = false; log('> loot drop: [ ( ) ]', 'lwh'); log('> press SPACE to refactor', 'lw2'); tutStep(); } }]);
+}
+function showDeath() {
+  overlay('PROCESS TERMINATED', '第 ' + G.floor + ' 层',
+    '<div class="big">exit code 1</div><div class="sub">你死于自己写的代码。</div>' +
+    '<table class="t"><tr><th>最长表达式</th><td>' + G.stats.maxT + ' token</td></tr>' +
+    '<tr><th>溢出次数</th><td>' + G.stats.overflow + '</td></tr>' +
+    '<tr><th>REFACTORED 触发</th><td>' + G.stats.refactors + '</td></tr>' +
+    '<tr><th>最高单次伤害</th><td>' + fmt(G.stats.best) + '</td></tr></table>',
+    [{ t: 'R 重开一局', d: './code_rogue --new-run', run: () => location.reload() }]);
+}
+function winGame() {
+  G.phase = 'won'; G.won = true;
+  overlay('RESOLVED.', 'on-call: you.',
+    '<div class="sub">Postmortem — 事故复盘</div>' +
+    '<table class="t"><tr><th>最长表达式</th><td>' + G.stats.maxT + ' token</td></tr>' +
+    '<tr><th>溢出次数</th><td>' + G.stats.overflow + '</td></tr>' +
+    '<tr><th>REFACTORED 触发</th><td>' + G.stats.refactors + '</td></tr>' +
+    '<tr><th>最高单次伤害</th><td>' + fmt(G.stats.best) + '</td></tr>' +
+    '<tr><th>击杀进程数</th><td>' + G.kills + '</td></tr>' +
+    '<tr><th>最终 A</th><td>' + G.vars.A + '</td></tr></table>' +
+    '<div class="sub" style="margin-top:10px">// 生产环境已恢复。下次别再写 12 个 token 的表达式了。</div>',
+    [{ t: '再来一局', d: '', run: () => location.reload() }]);
+}
+function nextFloorPrep() {
+  if (G.floor >= 12) { winGame(); return; }
+  startFloor(G.floor + 1);
+}
+function showHelp() {
+  overlay('HELP — 怎么玩', '',
+    '<div class="sub">你的攻击力不是数字，是一段代码。</div>' +
+    '<table class="t">' +
+    '<tr><th>TOKEN 预算</th><td>主表达式 + 所有函数参数<b>共享</b>同一个上限。多写一位 defend 参数 = 主伤害少一个乘法。</td></tr>' +
+    '<tr><th>技术债</th><td>≤8 干净；9/10/11/12 → 敌人减伤 10/22/36/52%；≥13 有几率报错归零。降到 ≤8 保持 3 回合 → REFACTORED +30%。</td></tr>' +
+    '<tr><th>内存</th><td>调用函数的资源，每回合恢复。不用完可以囤。</td></tr>' +
+    '<tr><th>整数溢出</th><td>伤害 > 2,147,483,647 时<b>超出部分会治疗敌人</b>。遗物 unsigned / BigInt / 限流器 是三条出路。</td></tr>' +
+    '<tr><th>?: 三元</th><td>X ?: Y 表示 HP&lt;50% 时取 Y，否则取 X。一行代码自动切换攻防。</td></tr>' +
+    '<tr><th>优先级</th><td>** &gt; 一元 &gt; * / % &gt; + - &gt; &lt;&lt; &gt;&gt; &gt; &amp; &gt; ^ &gt; | &gt; ?:　—— 1+2*3 = 7</td></tr>' +
+    '</table>' +
+    '<div class="sub" style="margin-top:8px">快捷键：<span class="kbd">空格</span> 执行　<span class="kbd">Tab</span> 自动格式化</div>',
+    [{ t: '关闭', d: '', run: () => { } }]);
+}
+
+/* ---------------------- 拖拽 ---------------------- */
+let drag = null;
+function highlightGap(x, y) {
+  const gaps = $('#exprRow').querySelectorAll('.gap');
+  let best = null, bd = 1e9;
+  gaps.forEach(g => {
+    const r = g.getBoundingClientRect();
+    const d = Math.abs(r.left + r.width / 2 - x) + Math.abs(r.top + r.height / 2 - y) * .25;
+    if (d < bd) { bd = d; best = g; }
+  });
+  gaps.forEach(g => g.classList.remove('hot'));
+  if (best && bd < 260) { best.classList.add('hot'); drag.gap = +best.dataset.i; }
+  else drag.gap = null;
+}
+document.addEventListener('mousedown', e => {
+  const tk = e.target.closest ? e.target.closest('.tk') : null;
+  if (!tk) return;
+  drag = { from: tk.dataset.src, id: tk.dataset.pool, idx: tk.dataset.i !== undefined ? +tk.dataset.i : -1, x: e.clientX, y: e.clientY, moved: false, node: tk, gap: null };
+  e.preventDefault();
+});
+document.addEventListener('mousemove', e => {
+  if (!drag) return;
+  if (Math.abs(e.clientX - drag.x) > 4 || Math.abs(e.clientY - drag.y) > 4) drag.moved = true;
+  if (!drag.moved) return;
+  const gh = $('#ghost'); gh.style.display = 'flex';
+  gh.style.left = (e.clientX - 13) + 'px'; gh.style.top = (e.clientY - 13) + 'px';
+  const lbl = drag.from === 'tray' ? (TOK[drag.id] ? TOK[drag.id].label : '') : (TOK[curExpr()[drag.idx]] ? TOK[curExpr()[drag.idx]].label : '');
+  gh.textContent = lbl;
+  drag.node.classList.add('dragging');
+  highlightGap(e.clientX, e.clientY);
+});
+document.addEventListener('mouseup', e => {
+  if (!drag) return;
+  $('#ghost').style.display = 'none';
+  drag.node.classList.remove('dragging');
+  const row = $('#exprRow').getBoundingClientRect();
+  const inside = e.clientX >= row.left - 20 && e.clientX <= row.right + 20 && e.clientY >= row.top - 50 && e.clientY <= row.bottom + 50;
+  const arr = curExpr();
+  if (!drag.moved) {
+    if (drag.from === 'tray') arr.push(drag.id);
+    else if (drag.idx >= 0 && drag.idx < arr.length) arr.splice(drag.idx, 1);
+  } else if (drag.from === 'tray') {
+    if (inside) arr.splice(drag.gap != null ? drag.gap : arr.length, 0, drag.id);
+    else arr.push(drag.id);
+  } else {
+    if (!inside) { if (drag.idx >= 0 && drag.idx < arr.length) arr.splice(drag.idx, 1); }
+    else {
+      const g = drag.gap != null ? drag.gap : arr.length;
+      const [it] = arr.splice(drag.idx, 1);
+      const to = g > drag.idx ? g - 1 : g;
+      arr.splice(clamp(to, 0, arr.length), 0, it);
+    }
+  }
+  drag = null; render();
+});
+
+/* ---------------------- 键盘 ---------------------- */
+document.addEventListener('keydown', e => {
+  if ($('#overlay').classList.contains('on')) {
+    if (e.key === ' ' || e.key === 'Enter') { const b = $('#card').querySelector('.opt'); if (b) b.click(); e.preventDefault(); }
+    return;
+  }
+  if (e.key === ' ') { playerTurn(); e.preventDefault(); }
+  if (e.key === 'Tab') { autoFormat(true); e.preventDefault(); }
+});
+
+/* ---------------------- 启动 ---------------------- */
+function boot() {
+  G.owned = {}; G.baseDmg = 6; G.hpBonus = 0; G.debtOffset = 0; G.unitUsed = false;
+  overlay('CODE ROGUE', 'a roguelike where your damage is a line of code',
+    '<div class="segv" style="border-color:var(--green);color:var(--green);background:#04180a">$ ./code_rogue --new-run\n[ OK ] linking libc.......\n[ OK ] loading tokens.....\n[WARN] 3 vulnerabilities found\n\n&gt; let A = 5\n&gt; damage = A</div>' +
+    '<div class="sub">你不抽卡、不打牌。你的攻击力是一段由你拼装的表达式。\n敌人是 bug，它们会删你的变量、改你的运算符、骗你溢出。\n\n黑底绿字，全程鼠标拖拽，不需要会写代码。</div>',
+    [{ t: '▶ 开始', d: '按 SPACE 或点击', run: startTutorial }], true);
+  render();
+}
+function startTutorial() {
+  hideOverlay();
+  log('$ ./code_rogue --new-run --class=python', 'lc');
+  log('[ OK ] linking libc........................', 'lw2');
+  log('[ OK ] loading tokens......................', 'lw2');
+  log('[WARN] 3 vulnerabilities found', 'lw');
+  log('> let A = 5', 'lwh');
+  log('> damage = A', 'lw2');
+  G.tut = 1;
+  setTimeout(tutStep, 350);
+}
+function tutFinish() {
+  G.tut = 5;
+  overlay('你学会了运算优先级', '',
+    '<div class="segv" style="border-color:var(--green);color:var(--green);background:#04180a">1 + 2 * 3 = 7, not 9.\n* binds tighter than +.</div>' +
+    '<div class="sub">上方那棵树就是你的代码。下面的文本只是它的显示形式。\n以后每次改动，三者实时同步。</div>' +
+    '<div class="sub">[ACHIEVEMENT] Order of Operations — "1 + 2 * 3 = 7, not 9"</div>',
+    [{ t: '继续（进入第 1 层）', d: '', run: () => { G.tut = 6; startFloor(1, 3); } }]);
+}
+boot();
+</script>
+</body>
+</html>

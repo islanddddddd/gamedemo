@@ -31,5 +31,10 @@
   "深渊": {
     "title": "深渊",
     "description": "普通的放置游戏"
+  },
+  "代码肉鸽": {
+    "title": "代码肉鸽",
+    "entry": "coderogue.html",
+    "review": "没意思"
   }
 }

@@ -53,7 +53,10 @@ function scanGames(root) {
     if (e.name.startsWith('.')) continue;        // 隐藏目录
     if (SKIP_DIRS.has(e.name)) continue;          // api / node_modules 等
     const dir = path.join(root, e.name);
-    if (!fs.existsSync(path.join(dir, 'index.html'))) continue; // 仅收录含入口的子文件夹
+    // hub.config.json 中以文件夹名为 key 覆盖（可指定入口文件名 entry，默认 index.html）
+    const override = config[e.name] || {};
+    const entry = (override.entry && typeof override.entry === 'string') ? override.entry : 'index.html';
+    if (!fs.existsSync(path.join(dir, entry))) continue; // 仅收录含入口文件的子文件夹
 
     // 文件夹内 game.json 作为内置默认
     let meta = {};
@@ -61,8 +64,6 @@ function scanGames(root) {
     if (fs.existsSync(metaPath)) {
       try { meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8')); } catch (_) {}
     }
-    // hub.config.json 中以文件夹名为 key 覆盖
-    const override = config[e.name] || {};
 
     // 缩略图优先级：配置指定 > game.json 指定 > 自动探测
     let thumb = override.thumbnail
@@ -76,7 +77,7 @@ function scanGames(root) {
       name: override.title || meta.title || e.name,
       description: override.description || meta.description || '',
       review: override.review || meta.review || '',
-      path: '/' + encodeURI(e.name) + '/index.html',
+      path: '/' + encodeURI(e.name) + '/' + encodeURI(entry),
       thumb
     });
   }
