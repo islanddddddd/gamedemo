@@ -1,0 +1,2671 @@
+<!DOCTYPE html>
+<!-- 由 build.js 从 src/ 自动生成，请勿直接改这个文件；改 src/ 后重新运行 node build.js -->
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>拆楼 DEMOLITION — 2D 原型</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230b0f14'/%3E%3Crect x='6' y='8' width='6' height='18' fill='%23ff8a3d'/%3E%3Crect x='16' y='4' width='10' height='8' fill='%23c6beac'/%3E%3C/svg%3E">
+<style>
+/* ==========================================================================
+   拆楼 DEMOLITION — 深色工程界面 · 橙色调
+   ========================================================================== */
+:root {
+  --bg: #0b0f14;
+  --bg2: #111823;
+  --panel: rgba(17, 24, 35, 0.88);
+  --line: rgba(255, 255, 255, 0.09);
+  --line2: rgba(255, 255, 255, 0.16);
+  --txt: #e6ecf3;
+  --txt2: #93a1b3;
+  --txt3: #64728a;
+  --orange: #ff8a3d;
+  --orange2: #ff6a1a;
+  --amber: #ffd23f;
+  --green: #3ddc84;
+  --red: #ff4d4d;
+  --cyan: #4dd2ff;
+  --radius: 10px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 100%; height: 100%;
+  background: var(--bg);
+  color: var(--txt);
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+  overflow: hidden;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+#app { position: fixed; inset: 0; }
+
+#stage {
+  position: absolute; inset: 0;
+  display: block; width: 100%; height: 100%;
+  cursor: crosshair;
+}
+
+/* ------------------------------ 顶部栏 ------------------------------ */
+#topbar {
+  position: absolute; top: 0; left: 0; right: 0; height: 54px;
+  display: flex; align-items: center; gap: 18px;
+  padding: 0 16px;
+  background: linear-gradient(180deg, rgba(11,15,20,0.96), rgba(11,15,20,0.0));
+  pointer-events: none;
+  z-index: 5;
+}
+#topbar button { pointer-events: auto; }
+
+.tb-left { display: flex; align-items: baseline; gap: 10px; min-width: 220px; }
+.lv-name { font-size: 17px; font-weight: 700; letter-spacing: 0.5px; }
+.lv-tag {
+  font-size: 11px; color: var(--orange);
+  background: rgba(255,138,61,0.12);
+  border: 1px solid rgba(255,138,61,0.3);
+  padding: 2px 7px; border-radius: 20px;
+}
+
+.tb-mid { display: flex; gap: 8px; flex: 1; justify-content: center; flex-wrap: wrap; }
+.obj {
+  display: flex; align-items: center; gap: 7px;
+  background: rgba(17,24,35,0.8);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 5px 11px;
+  font-size: 12px;
+}
+.obj b { color: var(--txt3); font-weight: 500; }
+.obj i { font-style: normal; font-weight: 700; font-variant-numeric: tabular-nums; }
+.obj.ok i { color: var(--green); }
+.obj.bad i { color: var(--red); }
+.obj.warn i { color: var(--amber); }
+
+.tb-right { display: flex; gap: 8px; }
+
+/* ------------------------------ 按钮 ------------------------------ */
+button {
+  font-family: inherit; font-size: 13px; color: var(--txt);
+  background: rgba(255,255,255,0.06);
+  border: 1px solid var(--line2);
+  border-radius: 8px;
+  padding: 7px 13px;
+  cursor: pointer;
+  transition: background .15s, border-color .15s, transform .08s;
+}
+button:hover { background: rgba(255,255,255,0.12); }
+button:active { transform: translateY(1px); }
+button:disabled { opacity: .35; cursor: not-allowed; }
+button.ghost { padding: 7px 10px; }
+button.fire {
+  background: linear-gradient(180deg, var(--orange), var(--orange2));
+  border-color: transparent; color: #14100c; font-weight: 800;
+  padding: 8px 22px; letter-spacing: 1px;
+  box-shadow: 0 4px 18px rgba(255,106,26,0.35);
+}
+button.fire:hover { filter: brightness(1.1); }
+
+/* ------------------------------ 右侧面板 ------------------------------ */
+#panel {
+  position: absolute; top: 58px; right: 12px; width: 258px;
+  max-height: calc(100% - 240px);
+  overflow-y: auto;
+  background: var(--panel);
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px;
+  z-index: 4;
+}
+#panel::-webkit-scrollbar { width: 6px; }
+#panel::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.14); border-radius: 3px; }
+
+.sec { margin-bottom: 14px; }
+.sec:last-child { margin-bottom: 4px; }
+.sec h3 {
+  font-size: 11px; font-weight: 700; letter-spacing: 1.4px;
+  color: var(--txt3); text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.brief { font-size: 12.5px; line-height: 1.65; color: var(--txt2); }
+.hint { font-size: 11px; line-height: 1.55; color: var(--txt3); margin-top: 7px; }
+
+/* 炸药库 */
+.charge-list { display: flex; flex-direction: column; gap: 6px; }
+.chg {
+  display: flex; align-items: center; gap: 9px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all .14s;
+  background: rgba(255,255,255,0.02);
+}
+.chg:hover { background: rgba(255,255,255,0.07); }
+.chg.on { border-color: var(--orange); background: rgba(255,138,61,0.12); }
+.chg .dot {
+  width: 20px; height: 20px; border-radius: 6px;
+  display: grid; place-items: center;
+  font-size: 11px; font-weight: 800; color: #10151c;
+  flex: 0 0 auto;
+}
+.chg .info { flex: 1; min-width: 0; }
+.chg .nm { font-size: 12.5px; font-weight: 600; }
+.chg .sub { font-size: 10.5px; color: var(--txt3); }
+.chg .price { font-size: 11px; color: var(--amber); font-weight: 700; flex: 0 0 auto; }
+
+/* 已布置 */
+.placed-list { display: flex; flex-direction: column; gap: 5px; }
+.placed-list .empty { font-size: 11.5px; color: var(--txt3); }
+.pitem {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 11.5px; padding: 5px 8px;
+  background: rgba(255,255,255,0.03);
+  border-radius: 6px;
+}
+.pitem .dot { width: 9px; height: 9px; border-radius: 3px; flex: 0 0 auto; }
+.pitem .nm { flex: 1; color: var(--txt2); }
+.pitem .tm { color: var(--amber); font-variant-numeric: tabular-nums; font-weight: 700; }
+.pitem .del { cursor: pointer; color: var(--txt3); padding: 0 3px; }
+.pitem .del:hover { color: var(--red); }
+
+/* 开关 */
+.sw { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--txt2); padding: 5px 0; cursor: pointer; }
+.sw input { accent-color: var(--orange); width: 15px; height: 15px; cursor: pointer; }
+
+/* ------------------------------ 底部工具条 ------------------------------ */
+#toolbar {
+  position: absolute; left: 16px; bottom: 138px;
+  display: flex; gap: 8px; align-items: center;
+  z-index: 4;
+}
+#toolbar .tb { background: var(--panel); backdrop-filter: blur(14px); }
+
+/* ------------------------------ 时序编辑器 ------------------------------ */
+#timeline {
+  position: absolute; left: 16px; right: 286px; bottom: 16px;
+  background: var(--panel);
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 9px 14px 12px;
+  z-index: 4;
+}
+.tl-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 8px; }
+.tl-title { font-size: 11px; font-weight: 700; letter-spacing: 1.3px; color: var(--orange); text-transform: uppercase; }
+.tl-sub { font-size: 10.5px; color: var(--txt3); }
+.tl-time { margin-left: auto; font-size: 11.5px; color: var(--amber); font-variant-numeric: tabular-nums; font-weight: 700; }
+
+.tl-track {
+  position: relative; height: 42px;
+  background: rgba(0,0,0,0.3);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  overflow: hidden;
+}
+.tl-grid {
+  position: absolute; inset: 0;
+  background-image: repeating-linear-gradient(90deg, rgba(255,255,255,0.055) 0 1px, transparent 1px 10%);
+}
+.tl-playhead {
+  position: absolute; top: 0; bottom: 0; width: 2px;
+  background: var(--orange); box-shadow: 0 0 10px var(--orange);
+  left: 0; opacity: 0; pointer-events: none;
+}
+.tl-notes { position: absolute; left: 16px; right: 16px; top: 0; bottom: 0; }
+.note {
+  position: absolute; top: 7px;
+  width: 26px; height: 28px;
+  border-radius: 6px;
+  display: grid; place-items: center;
+  font-size: 10.5px; font-weight: 800; color: #10151c;
+  cursor: grab;
+  border: 2px solid rgba(0,0,0,0.35);
+  transition: top .1s, transform .1s;
+}
+.note:hover { transform: scale(1.12); z-index: 3; }
+.note.sel { border-color: #fff; box-shadow: 0 0 0 2px rgba(255,255,255,0.35); }
+.note.dragging { cursor: grabbing; z-index: 5; }
+.note .t { position: absolute; bottom: -11px; font-size: 9px; color: var(--txt3); font-weight: 600; }
+
+.tl-scale {
+  display: flex; justify-content: space-between;
+  margin-top: 5px; font-size: 9.5px; color: var(--txt3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------ 结算 ------------------------------ */
+.hidden { display: none !important; }
+#result {
+  position: absolute; inset: 0; z-index: 20;
+  display: grid; place-items: center;
+  background: rgba(6,9,13,0.72);
+  backdrop-filter: blur(5px);
+}
+.res-card {
+  width: 400px; padding: 26px 28px;
+  background: linear-gradient(180deg, #151d29, #0f151d);
+  border: 1px solid var(--line2);
+  border-radius: 16px;
+  box-shadow: 0 24px 70px rgba(0,0,0,0.6);
+  text-align: center;
+  animation: pop .28s cubic-bezier(.2,1.3,.5,1);
+}
+@keyframes pop { from { transform: scale(.92); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.res-stars { font-size: 34px; letter-spacing: 8px; margin-bottom: 6px; color: var(--amber); }
+.res-stars .off { color: rgba(255,255,255,0.14); }
+.res-card h2 { font-size: 21px; margin-bottom: 16px; letter-spacing: 1px; }
+.res-list { list-style: none; text-align: left; margin-bottom: 14px; }
+.res-list li {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 11px; margin-bottom: 5px;
+  background: rgba(255,255,255,0.035);
+  border-radius: 7px; font-size: 12.5px;
+  border-left: 3px solid var(--line2);
+}
+.res-list li.ok { border-left-color: var(--green); }
+.res-list li.ok span:last-child { color: var(--green); font-weight: 700; }
+.res-list li.bad { border-left-color: var(--red); }
+.res-list li.bad span:last-child { color: var(--red); font-weight: 700; }
+.res-list li.info { border-left-color: var(--amber); }
+.res-list li span:last-child { font-variant-numeric: tabular-nums; }
+.res-why { font-size: 12px; line-height: 1.6; color: var(--txt2); margin-bottom: 18px; text-align: left; }
+.res-btns { display: flex; gap: 9px; justify-content: center; }
+
+/* ------------------------------ 关卡选择 ------------------------------ */
+.overlay {
+  position: absolute; inset: 0; z-index: 30;
+  display: grid; place-items: center;
+  background: radial-gradient(circle at 50% 40%, #16202e 0%, #080b10 70%);
+}
+.menu-card { width: 620px; text-align: center; }
+.menu-card h1 { font-size: 46px; letter-spacing: 10px; font-weight: 800; }
+.menu-card h1 span {
+  display: block; font-size: 12px; letter-spacing: 8px;
+  color: var(--orange); font-weight: 600; margin-top: 6px;
+}
+.tagline { margin: 18px 0 26px; color: var(--txt2); font-size: 13.5px; line-height: 1.7; }
+.menu-levels { display: grid; grid-template-columns: repeat(5, 1fr); gap: 9px; }
+.mlv {
+  padding: 14px 6px; border-radius: 10px;
+  border: 1px solid var(--line2); background: rgba(255,255,255,0.03);
+  cursor: pointer; transition: all .16s;
+}
+.mlv:hover { border-color: var(--orange); background: rgba(255,138,61,0.1); transform: translateY(-2px); }
+.mlv .no { font-size: 22px; font-weight: 800; color: var(--orange); }
+.mlv .nm { font-size: 11px; color: var(--txt2); margin-top: 5px; line-height: 1.4; }
+.menu-foot { margin-top: 24px; font-size: 11.5px; color: var(--txt3); }
+kbd {
+  background: rgba(255,255,255,0.1); border: 1px solid var(--line2);
+  border-radius: 4px; padding: 1px 5px; font-size: 10.5px; font-family: inherit;
+}
+
+/* ------------------------------ 教学卡 ------------------------------ */
+#tutorial {
+  position: absolute; left: 50%; top: 78px; transform: translateX(-50%);
+  z-index: 15; width: 470px;
+}
+.tut-card {
+  background: linear-gradient(180deg, rgba(30,40,56,0.97), rgba(18,25,35,0.97));
+  border: 1px solid rgba(255,138,61,0.35);
+  border-radius: 12px; padding: 16px 18px;
+  box-shadow: 0 16px 44px rgba(0,0,0,0.5);
+  animation: pop .26s cubic-bezier(.2,1.3,.5,1);
+}
+.tut-card h4 { font-size: 14px; color: var(--orange); margin-bottom: 8px; letter-spacing: .5px; }
+.tut-card p { font-size: 12.5px; line-height: 1.7; color: var(--txt2); margin-bottom: 12px; }
+.tut-card button { padding: 6px 18px; font-size: 12px; }
+
+@media (max-width: 1080px) {
+  #panel { width: 214px; }
+  #timeline { right: 240px; }
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="stage"></canvas>
+
+  <!-- 顶部：关卡与目标 -->
+  <header id="topbar">
+    <div class="tb-left">
+      <span id="levelName" class="lv-name">01 · 定向倒塌</span>
+      <span id="levelTag" class="lv-tag">教学 · 起爆顺序</span>
+    </div>
+    <div class="tb-mid">
+      <span class="obj" id="objCollapse"><b>倒塌率</b><i>—</i></span>
+      <span class="obj" id="objNeighbor"><b>邻栋损伤</b><i>—</i></span>
+      <span class="obj" id="objDir"><b>倒塌方向</b><i>—</i></span>
+      <span class="obj" id="objBudget"><b>预算</b><i>—</i></span>
+    </div>
+    <div class="tb-right">
+      <button id="btnHelp" class="ghost" title="操作说明">?</button>
+      <button id="btnMute" class="ghost" title="音效开关">音效</button>
+      <button id="btnMenu" class="ghost">关卡</button>
+    </div>
+  </header>
+
+  <!-- 右侧控制面板 -->
+  <aside id="panel">
+    <section class="sec">
+      <h3>任务简报</h3>
+      <p id="brief" class="brief"></p>
+    </section>
+
+    <section class="sec">
+      <h3>炸药库</h3>
+      <div id="chargeList" class="charge-list"></div>
+      <p id="chargeDesc" class="hint"></p>
+    </section>
+
+    <section class="sec">
+      <h3>已布置</h3>
+      <div id="placedList" class="placed-list"><p class="empty">还没有布置炸药</p></div>
+    </section>
+
+    <section class="sec">
+      <h3>团队与勘测</h3>
+      <label class="sw"><input type="checkbox" id="swLoad"><span>承重视图（绿→黄→红）</span></label>
+      <label class="sw"><input type="checkbox" id="swFlow"><span>力流可视化</span></label>
+      <label class="sw"><input type="checkbox" id="swLabels"><span>显示倒塌区域</span></label>
+      <p class="hint" id="loadHint">开启后可看到每根构件的荷载利用率。红柱一旦失稳，会连锁压溃。</p>
+    </section>
+  </aside>
+
+  <!-- 底部操作条 -->
+  <div id="toolbar">
+    <button id="btnPreview" class="tb">预测轨迹</button>
+    <button id="btnClear" class="tb">清空炸药</button>
+    <button id="btnRetry" class="tb">↺ 重试</button>
+    <button id="btnFire" class="fire">▶ 起爆</button>
+  </div>
+
+  <!-- 时序编辑器 -->
+  <div id="timeline">
+    <div class="tl-head">
+      <span class="tl-title">时序编辑器</span>
+      <span class="tl-sub">拖动音符调整起爆时刻（0.1s 精度）</span>
+      <span class="tl-time" id="tlTime">t = 0.0s</span>
+    </div>
+    <div class="tl-track" id="tlTrack">
+      <div class="tl-grid"></div>
+      <div class="tl-playhead" id="tlHead"></div>
+      <div class="tl-notes" id="tlNotes"></div>
+    </div>
+    <div class="tl-scale" id="tlScale"></div>
+  </div>
+
+  <!-- 结算面板 -->
+  <div id="result" class="hidden">
+    <div class="res-card">
+      <div class="res-stars" id="resStars"></div>
+      <h2 id="resTitle">拆除完成</h2>
+      <ul id="resList" class="res-list"></ul>
+      <p id="resWhy" class="res-why"></p>
+      <div class="res-btns">
+        <button id="btnReplay" class="ghost">回放</button>
+        <button id="btnAgain" class="tb">再来一次</button>
+        <button id="btnNext" class="fire">下一关</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 序章 / 关卡选择 -->
+  <div id="menu" class="overlay">
+    <div class="menu-card">
+      <h1>拆楼<span>DEMOLITION</span></h1>
+      <p class="tagline">你是定向爆破工程师。目标楼必须塌，旁边三栋必须毫发无损。</p>
+      <div id="menuLevels" class="menu-levels"></div>
+      <p class="menu-foot">按住 <kbd>右键拖动</kbd> 平移 · <kbd>滚轮</kbd> 缩放 · <kbd>左键</kbd> 放炸药 · <kbd>右键点击</kbd> 删除</p>
+    </div>
+  </div>
+
+  <!-- 教学卡 -->
+  <div id="tutorial" class="hidden">
+    <div class="tut-card">
+      <h4 id="tutTitle"></h4>
+      <p id="tutBody"></p>
+      <button id="tutOk" class="fire">明白了</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ==========================================================================
+   拆楼 DEMOLITION — 确定性 2D 结构破坏引擎
+   --------------------------------------------------------------------------
+   设计红线 1：物理必须确定性。全部采用「固定步长 + 固定迭代次数 + 固定
+   遍历顺序」的位置约束(PBD)求解，不使用 Math.random，不使用可变 dt。
+   同样的布置 => 同样的结果。
+   ========================================================================== */
+'use strict';
+
+/* ------------------------------ 全局常量 ------------------------------ */
+const VOX = 8;                  // 体素边长(世界单位)
+const DT = 1 / 120;             // 固定物理步长(秒)
+const GRAVITY = 1500;           // 重力加速度
+const ITERATIONS = 14;          // PBD 约束迭代次数
+const BREAK_STRAIN = 0.34;      // 断裂应变阈值(相对形变)
+const AIR_DAMP = 0.9992;        // 空气阻尼
+const GROUND_FRIC = 0.78;       // 地面摩擦
+const MIN_DIST = VOX * 0.70;    // 粒子最小间距(碰撞)
+const MAX_SPEED = VOX * 45;     // 速度上限，防数值爆炸
+const COLLISION_PASSES = 2;     // 碰撞求解遍数
+const OVERLOAD = 1.18;          // 超载压溃阈值(利用率)
+const ANCHOR_K = 0.22;          // 桩基锚固强度(柱脚入岩，抵抗水平推移)
+
+/* ------------------------------ 材料表 ------------------------------ */
+/* attr: 视觉与力学属性
+   mass  质量
+   stiff 荷载分配权重(刚度) —— 刚度大的构件会"抢"到更多荷载
+   cap   承载能力 —— 荷载/承载 = 利用率，决定染色
+   str   抗破坏强度，影响断裂阈值与抗爆能力
+*/
+const MAT = {
+  column: { name: '承重柱', color: '#7d8797', dark: '#5a6473', mass: 1.9, stiff: 3.0, cap: 1.00, str: 1.00 },
+  core:   { name: '核心筒', color: '#6a7484', dark: '#4a5361', mass: 2.6, stiff: 5.0, cap: 1.55, str: 1.45 },
+  slab:   { name: '楼板',   color: '#9aa5b4', dark: '#79838f', mass: 1.1, stiff: 1.2, cap: 0.50, str: 0.78 },
+  wall:   { name: '填充墙', color: '#b4bec9', dark: '#97a1ad', mass: 0.55, stiff: 0.5, cap: 0.26, str: 0.48 },
+};
+
+/* ------------------------------ 建筑生成 ------------------------------ */
+/**
+ * 依据规格生成一栋楼
+ * spec: { x, cols, rows, colStep=4, floorStep=3, core=null, name, kind }
+ *   x        左边界(世界坐标)
+ *   cols/rows 体素数
+ *   colStep  每隔几格一根承重柱
+ *   core     [i0,i1] 核心筒所在列区间(可选)
+ */
+function buildBuilding(spec, world, groundY) {
+  const cols = spec.cols, rows = spec.rows;
+  const colStep = spec.colStep || 4;
+  const floorStep = spec.floorStep || 3;
+  const bx = spec.x;
+  const by = groundY - rows * VOX;
+
+  const b = {
+    name: spec.name || '建筑',
+    kind: spec.kind || 'normal',       // normal | target | protected
+    cols, rows, bx, by, spec,
+    particles: [],                     // 粒子索引
+    init: null,                        // 初始位置快照 Float64Array
+    maxLoad0: 1,                       // 初始最大荷载(用于标定)
+    loadK: 1,                          // 荷载标定系数
+    maxRatio: 0,
+  };
+
+  // ---- 生成粒子 ----
+  // 底层开敞(只有柱脚落地)：这样"切断承重柱"才真正等于"抽掉支撑"，
+  // 否则整个建筑底面都贴地，切柱子毫无意义。
+  const openRows = spec.groundOpen != null ? spec.groundOpen
+    : ((rows % floorStep) || floorStep);
+  const openFrom = rows - openRows;
+
+  const index = new Int32Array(cols * rows).fill(-1);
+  for (let j = 0; j < rows; j++) {
+    for (let i = 0; i < cols; i++) {
+      const isCore = !!(spec.core && i >= spec.core[0] && i <= spec.core[1] && j > 0);
+      const isCol = (i % colStep === 0) || (i === cols - 1) || isCore;
+      if (j > openFrom && !isCol) continue;      // 开敞层：只留柱脚
+
+      let m;
+      if (isCore) m = 'core';
+      else if (i % colStep === 0 || i === cols - 1) m = 'column';
+      else if (j % floorStep === 0) m = 'slab';
+      else m = 'wall';
+
+      const p = {
+        x: bx + (i + 0.5) * VOX,
+        y: by + (j + 0.5) * VOX,
+        px: 0, py: 0, vx: 0, vy: 0,
+        w: 1 / MAT[m].mass,            // 逆质量
+        mat: m, bIdx: world.buildings.length,
+        alive: true, gi: i, gj: j,
+        ground: false, dmg: 0,
+        load: 0, ratio: 0, supported: false,
+        baseColor: '#888',
+      };
+      index[j * cols + i] = world.particles.length;
+      world.particles.push(p);
+      b.particles.push(world.particles.length - 1);
+    }
+  }
+  b.grid = index;
+  b.openFrom = openFrom;
+
+  // 桩基锚固：每根柱线最底部的粒子视为已锚入岩层，不会水平滑移。
+  // 没有这一条，倒塌的碎块会把旁边完好的楼整栋推走。
+  for (let i = 0; i < cols; i++) {
+    const pi = index[(rows - 1) * cols + i];
+    if (pi < 0) continue;
+    const p = world.particles[pi];
+    if (p.mat === 'column' || p.mat === 'core') {
+      p.anchor = true; p.ax = p.x; p.ay = p.y;
+    }
+  }
+
+  // ---- 生成约束 ----
+  // 短程约束(1格)：承担荷载传递与剪切刚度
+  // 长程约束(2/4格)：加速荷载沿柱身的传播，使高楼在少量迭代下依然刚性
+  const SHORT = [[1, 0], [0, 1], [1, 1], [1, -1]];
+  const LONG = [[2, 0], [0, 2], [2, 2], [2, -2], [4, 0], [0, 4], [4, 4], [4, -4]];
+
+  const add = (ai, bi, isLong) => {
+    if (ai < 0 || bi < 0) return;
+    const a = world.particles[ai], c = world.particles[bi];
+    const dx = c.x - a.x, dy = c.y - a.y;
+    const rest = Math.sqrt(dx * dx + dy * dy);
+    world.constraints.push({
+      a: ai, b: bi, rest,
+      broken: false, isLong, load: 0,
+      // 断裂阈值取两端材料中较弱者
+      thr: BREAK_STRAIN * Math.min(MAT[a.mat].str, MAT[c.mat].str) * (isLong ? 0.85 : 1),
+      ex: dx / rest, ey: dy / rest,     // 初始方向(用于判断"下方")
+    });
+  };
+
+  for (let j = 0; j < rows; j++) {
+    for (let i = 0; i < cols; i++) {
+      const a = index[j * cols + i];
+      if (a < 0) continue;
+      for (const [di, dj] of SHORT) {
+        const ii = i + di, jj = j + dj;
+        if (ii < 0 || ii >= cols || jj < 0 || jj >= rows) continue;
+        add(a, index[jj * cols + ii], false);
+      }
+      for (const [di, dj] of LONG) {
+        const ii = i + di, jj = j + dj;
+        if (ii < 0 || ii >= cols || jj < 0 || jj >= rows) continue;
+        add(a, index[jj * cols + ii], true);
+      }
+    }
+  }
+
+  // ---- 初始快照 ----
+  const N = b.particles.length;
+  b.init = new Float64Array(N * 2);
+  b.particles.forEach((pi, k) => {
+    b.init[k * 2] = world.particles[pi].x;
+    b.init[k * 2 + 1] = world.particles[pi].y;
+  });
+
+  world.buildings.push(b);
+  return b;
+}
+
+/* ------------------------------ 世界 ------------------------------ */
+function createWorld(groundY) {
+  return {
+    groundY,
+    particles: [],
+    constraints: [],
+    buildings: [],
+    time: 0,
+    steps: 0,
+    // 加速结构：每个粒子的邻接约束表(惰性构建)
+    adj: null,
+    adjDirty: true,
+    hash: new Map(),
+    bounds: { minX: 0, maxX: 0, minY: 0, maxY: 0 },
+  };
+}
+
+/** 构建/更新邻接表 */
+function rebuildAdj(world) {
+  const n = world.particles.length;
+  const adj = new Array(n);
+  for (let i = 0; i < n; i++) adj[i] = [];
+  for (let ci = 0; ci < world.constraints.length; ci++) {
+    const c = world.constraints[ci];
+    if (c.isLong) continue;                 // 荷载分析只看短程约束
+    adj[c.a].push(ci);
+    adj[c.b].push(ci);
+  }
+  world.adj = adj;
+  world.adjDirty = false;
+}
+
+/* ------------------------------ 物理步进 ------------------------------ */
+/** 单个固定步长，严格确定性 */
+function step(world) {
+  const P = world.particles, C = world.constraints, N = P.length;
+  const gdt = GRAVITY * DT;
+
+  // ---- 1. 预测 ----
+  for (let i = 0; i < N; i++) {
+    const p = P[i];
+    if (!p.alive) continue;
+    p.vy += gdt;
+    if (p.vy > MAX_SPEED) p.vy = MAX_SPEED;
+    else if (p.vy < -MAX_SPEED) p.vy = -MAX_SPEED;
+    if (p.vx > MAX_SPEED) p.vx = MAX_SPEED;
+    else if (p.vx < -MAX_SPEED) p.vx = -MAX_SPEED;
+    p.vyPre = p.vy;              // 求解前的竖直速度，用于表现层判定"撞击"
+    p.px = p.x; p.py = p.y;
+    p.x += p.vx * DT;
+    p.y += p.vy * DT;
+  }
+
+  // ---- 2. 约束求解 (Gauss-Seidel，固定顺序) ----
+  const M = C.length;
+  for (let it = 0; it < ITERATIONS; it++) {
+    for (let ci = 0; ci < M; ci++) {
+      const c = C[ci];
+      if (c.broken) continue;
+      const a = P[c.a], b = P[c.b];
+      if (!a.alive || !b.alive) continue;
+      let dx = b.x - a.x, dy = b.y - a.y;
+      const d2 = dx * dx + dy * dy;
+      if (d2 < 1e-9) continue;
+      const d = Math.sqrt(d2);
+      const diff = (d - c.rest) / d;
+      const wa = a.w, wb = b.w, ws = wa + wb;
+      if (ws === 0) continue;
+      const kx = dx * diff, ky = dy * diff;
+      a.x += kx * (wa / ws); a.y += ky * (wa / ws);
+      b.x -= kx * (wb / ws); b.y -= ky * (wb / ws);
+    }
+    // 地面(每轮迭代约束一次，防止穿透)。粒子中心停在 groundY - VOX/2 处，
+    // 使粒子下边缘恰好贴住地面线。
+    const lim = world.groundY - VOX * 0.5;
+    for (let i = 0; i < N; i++) {
+      const p = P[i];
+      if (!p.alive) continue;
+      if (p.y > lim) p.y = lim;
+      if (p.anchor) p.x += (p.ax - p.x) * ANCHOR_K;   // 桩基锚固(水平)
+    }
+  }
+
+  // ---- 3. 粒子间碰撞(空间哈希，分离位置) ----
+  solveCollisions(world);
+
+  // ---- 4. 速度更新 ----
+  const invDt = 1 / DT;
+  for (let i = 0; i < N; i++) {
+    const p = P[i];
+    if (!p.alive) continue;
+    p.vx = (p.x - p.px) * invDt;
+    p.vy = (p.y - p.py) * invDt;
+    p.vx *= AIR_DAMP; p.vy *= AIR_DAMP;
+    p.ground = (p.y >= world.groundY - VOX * 0.5 - 0.4);
+    if (p.ground) { p.vx *= GROUND_FRIC; }   // 地面摩擦(锚固)
+  }
+
+  // ---- 5. 结构断裂判定 ----
+  breakCheck(world);
+
+  world.time += DT;
+  world.steps++;
+}
+
+/* 粒子间碰撞：不同建筑之间必须碰撞(邻栋损伤)，同建筑内部也需碰撞(废墟堆积) */
+function solveCollisions(world) {
+  const P = world.particles;
+  const hash = world.hash;
+  hash.clear();
+  const cell = VOX;
+
+  for (let i = 0; i < P.length; i++) {
+    const p = P[i];
+    if (!p.alive) continue;
+    const key = ((Math.floor(p.x / cell) + 4096) << 13) ^ (Math.floor(p.y / cell) + 4096);
+    let bucket = hash.get(key);
+    if (!bucket) { bucket = []; hash.set(key, bucket); }
+    bucket.push(i);
+  }
+
+  const md2 = MIN_DIST * MIN_DIST;
+  for (let pass = 0; pass < COLLISION_PASSES; pass++) {
+    for (let i = 0; i < P.length; i++) {
+      const a = P[i];
+      if (!a.alive) continue;
+      const cx = Math.floor(a.x / cell), cy = Math.floor(a.y / cell);
+      for (let ox = -1; ox <= 1; ox++) {
+        for (let oy = -1; oy <= 1; oy++) {
+          const key = ((cx + ox + 4096) << 13) ^ (cy + oy + 4096);
+          const bucket = hash.get(key);
+          if (!bucket) continue;
+          for (let bi = 0; bi < bucket.length; bi++) {
+            const j = bucket[bi];
+            if (j <= i) continue;
+            const b = P[j];
+            if (!b.alive) continue;
+            let dx = b.x - a.x, dy = b.y - a.y;
+            const d2 = dx * dx + dy * dy;
+            if (d2 >= md2 || d2 < 1e-9) continue;
+            const d = Math.sqrt(d2);
+            const pen = (MIN_DIST - d) / d;
+            const wa = a.w, wb = b.w, ws = wa + wb;
+            const k = 0.5 * pen;
+            a.x -= dx * k * (wa / ws); a.y -= dy * k * (wa / ws);
+            b.x += dx * k * (wb / ws); b.y += dy * k * (wb / ws);
+          }
+        }
+      }
+    }
+  }
+}
+
+/* 应变断裂：局部形变超过材料强度 => 约束断裂 => 荷载重分配 => 连锁 */
+function breakCheck(world) {
+  const P = world.particles, C = world.constraints;
+  let dirty = false;
+  for (let ci = 0; ci < C.length; ci++) {
+    const c = C[ci];
+    if (c.broken) continue;
+    const a = P[c.a], b = P[c.b];
+    if (!a.alive || !b.alive) { c.broken = true; dirty = true; continue; }
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const d = Math.sqrt(dx * dx + dy * dy);
+    const strain = Math.abs(d - c.rest) / c.rest;
+    if (strain > c.thr) { c.broken = true; dirty = true; }
+  }
+  if (dirty) world.adjDirty = true;
+}
+
+/* ------------------------------ 荷载分析 ------------------------------ */
+/**
+ * 承重视图的核心：按真实框架的传力路径估算每个构件的荷载利用率。
+ *   填充墙 → 下方构件 → 楼板 → 【同层最近的承重柱】 → 向下传至地基
+ * 因此一旦切掉某根柱，它那一跨的荷载会按距离比例压到相邻柱上 —— 相邻柱
+ * 由黄转红，超过承载则压溃，触发连锁失效。这就是「切哪根柱子」的可视化基础。
+ */
+function analyzeLoad(world) {
+  const P = world.particles;
+
+  for (const b of world.buildings) {
+    const cols = b.cols, rows = b.rows, grid = b.grid;
+
+    for (let k = 0; k < b.particles.length; k++) {
+      const p = P[b.particles[k]];
+      if (!p.alive) { p.ratio = 0; p.grounded = false; continue; }
+      p.load = MAT[p.mat].mass;
+      p.grounded = false;
+      p.supported = (p.y >= world.groundY - VOX * 0.9);
+    }
+
+    // 接地连通性：柱身必须整条不断，才能把荷载送到地基。
+    // 断掉的柱，其上方荷载会按距离改压到相邻的、仍然接地的柱上。
+    for (let gi = 0; gi < cols; gi++) {
+      let ok = true;
+      for (let gj = rows - 1; gj >= 0; gj--) {
+        const i = grid[gj * cols + gi];
+        if (i < 0) continue;
+        const p = P[i];
+        if (!p.alive) { ok = false; continue; }
+        if (p.mat === 'column' || p.mat === 'core') p.grounded = ok;
+      }
+    }
+
+    // 自顶向下逐层累积：荷载必须先在上部完全汇集，才能往下传
+    for (let gj = 0; gj < rows; gj++) {
+      const row = [];
+      for (let gi = 0; gi < cols; gi++) {
+        const i = grid[gj * cols + gi];
+        if (i >= 0 && P[i].alive) row.push(i);
+      }
+      // 本层存活的柱
+      const rowColIdx = [];
+      for (const i of row) {
+        const m = P[i].mat;
+        if (m === 'column' || m === 'core') rowColIdx.push(P[i].gi);
+      }
+      rowColIdx.sort((a, b2) => a - b2);
+
+      const nearestCol = (p, excl, mustGround) => {
+        if (!rowColIdx.length) return -1;
+        let best = -1, bd = 1e9, bestAny = -1, bdAny = 1e9;
+        for (const ci of rowColIdx) {
+          if (excl != null && ci === excl) continue;
+          const idx = grid[gj * cols + ci];
+          if (idx < 0 || !P[idx].alive) continue;
+          const d = Math.abs(ci - p.gi);
+          if (d < bdAny) { bdAny = d; bestAny = ci; }
+          if (mustGround && !P[idx].grounded) continue;
+          if (d < bd) { bd = d; best = ci; }
+        }
+        const pick = best >= 0 ? best : (mustGround ? -1 : bestAny);
+        if (pick < 0) return -1;
+        const idx = grid[gj * cols + pick];
+        return (idx >= 0 && P[idx].alive) ? idx : -1;
+      };
+
+      const below = (p) => {
+        if (p.gj + 1 >= rows) return -1;
+        const idx = grid[(p.gj + 1) * cols + p.gi];
+        return (idx >= 0 && P[idx].alive) ? idx : -1;
+      };
+
+      // ---- 第一组：墙与楼板(楼板向本层柱横向传力) ----
+      for (const i of row) {
+        const p = P[i];
+        if (p.mat === 'column' || p.mat === 'core') continue;
+        const sup = [];
+        const push = (j, w) => { if (j >= 0 && j !== i) sup.push([j, w]); };
+        if (p.mat === 'slab') {
+          let L = null, R = null;
+          for (const ci of rowColIdx) {
+            if (ci < p.gi) L = ci; else if (ci > p.gi && R === null) R = ci;
+          }
+          if (L !== null && R !== null) {
+            push(grid[gj * cols + L], 1 / (p.gi - L + 0.7));
+            push(grid[gj * cols + R], 1 / (R - p.gi + 0.7));
+          } else if (L !== null) push(grid[gj * cols + L], 1);
+          else if (R !== null) push(grid[gj * cols + R], 1);
+          if (!sup.length) push(below(p), 1);
+        } else {
+          push(below(p), 1);
+          if (!sup.length) push(nearestCol(p, p.gi, true), 1);
+        }
+        if (!sup.length) continue;
+        let ws = 0; for (const s of sup) ws += s[1];
+        for (const s of sup) P[s[0]].load += p.load * (s[1] / ws);
+      }
+
+      // ---- 第二组：柱与核心筒垂直下传 ----
+      for (const i of row) {
+        const p = P[i];
+        if (p.mat !== 'column' && p.mat !== 'core') continue;
+        const j = below(p);
+        if (j >= 0 && P[j].grounded) { P[j].load += p.load; continue; }
+        // 自身已落地：荷载交给地基，绝不能再横向转给邻柱
+        // (否则最底层两根柱会互相"托付"，荷载虚增一倍)
+        if (p.grounded) continue;
+        const n = nearestCol(p, p.gi, true);      // 本柱已断，荷载改压相邻接地柱
+        if (n >= 0 && n !== i) P[n].load += p.load;
+        else if (j >= 0) P[j].load += p.load;
+      }
+    }
+
+    // 利用率
+    let maxR = 0;
+    for (let k = 0; k < b.particles.length; k++) {
+      const p = P[b.particles[k]];
+      if (!p.alive) { p.ratio = 0; continue; }
+      p.ratio = p.load / (b.loadK * MAT[p.mat].cap);
+      if (p.ratio > maxR) maxR = p.ratio;
+    }
+    b.maxRatio = maxR;
+  }
+}
+
+/** 标定荷载系数：让完好状态下最高利用率为 0.5(黄绿之间)，留出超载空间 */
+function calibrateLoad(world) {
+  for (const b of world.buildings) {
+    b.loadK = 1;
+    let maxLoad = 1;
+    for (let k = 0; k < b.particles.length; k++) {
+      const p = world.particles[b.particles[k]];
+      const v = p.load / MAT[p.mat].cap;
+      if (v > maxLoad) maxLoad = v;
+    }
+    b.loadK = maxLoad / 0.5;     // 使最高利用率 ≈ 0.5
+  }
+}
+
+/* ------------------------------ 爆炸 ------------------------------ */
+/** 依据炸药类型摧毁/推动结构 */
+function applyCharge(world, ch) {
+  const P = world.particles;
+  const hit = [];
+  const push = ch.push || 0;
+  const power = (ch.power == null ? 1 : ch.power);
+  const radius = ch.radius || 12;
+
+  if (ch.type === 'line') {
+    const x1 = ch.x1, y1 = ch.y1, x2 = ch.x2, y2 = ch.y2;
+    const dx = x2 - x1, dy = y2 - y1;
+    const len2 = dx * dx + dy * dy || 1;
+    for (let i = 0; i < P.length; i++) {
+      const p = P[i];
+      if (!p.alive) continue;
+      let t = ((p.x - x1) * dx + (p.y - y1) * dy) / len2;
+      t = t < 0 ? 0 : t > 1 ? 1 : t;
+      const cx = x1 + t * dx, cy = y1 + t * dy;
+      const d = Math.hypot(p.x - cx, p.y - cy);
+      if (d <= radius) {
+        if (d > 0 && push) { p.vx += ((p.x - cx) / d) * push * (1 - d / radius); p.vy += ((p.y - cy) / d) * push * (1 - d / radius); }
+        if (MAT[p.mat].str <= power) hit.push(i);
+      }
+    }
+  } else {
+    for (let i = 0; i < P.length; i++) {
+      const p = P[i];
+      if (!p.alive) continue;
+      const dx = p.x - ch.x, dy = p.y - ch.y;
+      const d = Math.hypot(dx, dy);
+      if (d > radius) continue;
+      if (d > 0.001 && push) {
+        const f = push * (1 - d / radius);
+        p.vx += (dx / d) * f; p.vy += (dy / d) * f;
+      }
+      if (MAT[p.mat].str <= power) hit.push(i);
+    }
+  }
+
+  for (const i of hit) {
+    if (P[i].alive) killParticle(world, i);
+  }
+  world.adjDirty = true;
+}
+
+/** 移除粒子(破坏)，使其所有约束断裂 */
+function killParticle(world, i) {
+  const p = world.particles[i];
+  if (!p.alive) return;
+  p.alive = false;
+  p.vx = 0; p.vy = 0;
+  if (!world.adjDirty && world.adj) {
+    for (const ci of world.adj[i]) world.constraints[ci].broken = true;
+  }
+  world.adjDirty = true;
+}
+
+/* ------------------------------ 结构失效(超载) ------------------------------ */
+/** 利用率超过阈值并持续一段时间 => 构件压溃 => 连锁失效 */
+function structuralFailure(world, dt) {
+  const P = world.particles;
+  let any = false;
+  for (const b of world.buildings) {
+    for (let k = 0; k < b.particles.length; k++) {
+      const p = P[b.particles[k]];
+      if (!p.alive) continue;
+      if (p.ratio > OVERLOAD) {
+        p.dmg = (p.dmg || 0) + dt * (p.ratio - OVERLOAD) * 3.0;
+        if (p.dmg >= 1) { killParticle(world, b.particles[k]); any = true; }
+      } else if (p.dmg) {
+        p.dmg = Math.max(0, p.dmg - dt * 0.9);   // 卸载后缓慢恢复
+      }
+    }
+  }
+  return any;
+}
+
+/* ------------------------------ 评估 ------------------------------ */
+function evaluate(world, level) {
+  const targets = world.buildings.filter(b => b.kind === 'target');
+  const P = world.particles;
+
+  // 倒塌率：目标楼中"失去原位高度或显著位移"的体素占比(多栋取加权平均)
+  let fallen = 0, total = 0;
+  for (const target of targets) {
+    for (let k = 0; k < target.particles.length; k++) {
+      const p = P[target.particles[k]];
+      total++;
+      if (!p.alive) { fallen++; continue; }
+      const ix = target.init[k * 2], iy = target.init[k * 2 + 1];
+      const drop = p.y - iy;
+      const disp = Math.hypot(p.x - ix, drop);
+      if (drop > VOX * 0.9 || disp > VOX * 2.2) fallen++;
+    }
+  }
+  const collapse = total ? fallen / total : 0;
+
+  // 邻栋损伤：受保护建筑中位移/掉件占比
+  let ndmg = 0, ntotal = 0;
+  for (const b of world.buildings) {
+    if (b.kind !== 'protected' && b.kind !== 'normal') continue;
+    for (let k = 0; k < b.particles.length; k++) {
+      const p = P[b.particles[k]];
+      ntotal++;
+      if (!p.alive) { ndmg++; continue; }
+      const ix = b.init[k * 2], iy = b.init[k * 2 + 1];
+      const disp = Math.hypot(p.x - ix, p.y - iy);
+      if (disp > VOX * 1.1) ndmg++;
+    }
+  }
+  const neighbor = ntotal ? ndmg / ntotal : 0;
+
+  // 倒塌方向：目标楼废墟形心
+  let cx = 0, cy = 0, n = 0;
+  for (const target of targets) {
+    for (let k = 0; k < target.particles.length; k++) {
+      const p = P[target.particles[k]];
+      if (!p.alive) continue;
+      cx += p.x; cy += p.y; n++;
+    }
+  }
+  const centroidX = n ? cx / n : (targets[0] ? targets[0].bx : 0);
+  const centroidY = n ? cy / n : world.groundY;
+
+  /* 倒塌方向判定用「上部质量落点」而不是整体形心：
+     整体形心里混着大量留在原地的底层碎片，会把位移稀释掉；
+     只有真正倒向某一侧，上部质量才会大幅平移。 */
+  const topStats = (target) => {
+    const cut = Math.max(1, Math.floor(target.rows * 0.3));
+    let tx = 0, tn = 0;
+    for (let k = 0; k < target.particles.length; k++) {
+      const p = P[target.particles[k]];
+      if (!p.alive || p.gj >= cut) continue;
+      tx += p.x; tn++;
+    }
+    return tn ? { x: tx / tn, n: tn } : { x: target.bx + target.cols * VOX / 2, n: 0 };
+  };
+
+  /* 两种方向模式
+     'zone'  —— 全部目标上部质量的整体落点必须落在指定区间
+     'drift' —— 每栋目标楼的上部落点相对原中心位移必须落在区间内 */
+  let zoneOK = true, dirInfo = [], topCentroidX = centroidX;
+  if (level.dir && level.dir.mode === 'drift') {
+    let ax = 0, an = 0;
+    for (const target of targets) {
+      const s = topStats(target);
+      ax += s.x * (s.n || 1); an += (s.n || 1);
+      const initCenter = target.bx + target.cols * VOX / 2;
+      const drift = s.x - initCenter;
+      dirInfo.push({
+        name: target.name, drift,
+        ok: drift >= level.dir.min && drift <= (level.dir.max || 1e9),
+      });
+    }
+    topCentroidX = an ? ax / an : centroidX;
+    zoneOK = dirInfo.length > 0 && dirInfo.every(d => d.ok);
+  } else if (level.dir && level.dir.mode === 'zone') {
+    let ax = 0, an = 0;
+    for (const target of targets) {
+      const s = topStats(target);
+      ax += s.x * (s.n || 1); an += (s.n || 1);
+    }
+    topCentroidX = an ? ax / an : centroidX;
+    zoneOK = topCentroidX >= level.dir.x0 && topCentroidX <= level.dir.x1;
+  }
+
+  return {
+    collapse, neighbor, centroidX, centroidY, topCentroidX,
+    zoneOK, dirInfo, dir: level.dir, targets,
+    rest: isAtRest(world),
+  };
+}
+
+/** 采样全部粒子位置，用于"看它到底还动不动" */
+function samplePositions(world) {
+  const P = world.particles;
+  const a = new Float64Array(P.length * 2);
+  for (let i = 0; i < P.length; i++) { a[i * 2] = P[i].x; a[i * 2 + 1] = P[i].y; }
+  return a;
+}
+
+/** 与上次采样相比的最大位移。比"速度阈值"稳得多：
+    废墟里堆叠的粒子会一直有微小抖动，用速度判会永远判不出静止。 */
+function maxDrift(world, prev) {
+  const P = world.particles;
+  let mx = 0;
+  for (let i = 0; i < P.length; i++) {
+    const d = Math.abs(P[i].x - prev[i * 2]) + Math.abs(P[i].y - prev[i * 2 + 1]);
+    if (d > mx) mx = d;
+  }
+  return mx;
+}
+
+function isAtRest(world, thresh) {
+  thresh = thresh || VOX * 0.6;
+  const P = world.particles;
+  for (let i = 0; i < P.length; i++) {
+    const p = P[i];
+    if (!p.alive) continue;
+    if (!isFinite(p.x) || !isFinite(p.y)) return false;
+    if (Math.abs(p.vx) > thresh || Math.abs(p.vy) > thresh) return false;
+  }
+  return true;
+}
+
+/* ------------------------------ 快照 / 确定性 ------------------------------ */
+function snapshot(world) {
+  const P = world.particles;
+  const pos = new Float64Array(P.length * 2);
+  const alive = new Uint8Array(P.length);
+  for (let i = 0; i < P.length; i++) {
+    pos[i * 2] = P[i].x; pos[i * 2 + 1] = P[i].y;
+    alive[i] = P[i].alive ? 1 : 0;
+  }
+  const broken = new Uint8Array(world.constraints.length);
+  for (let i = 0; i < world.constraints.length; i++) broken[i] = world.constraints[i].broken ? 1 : 0;
+  return { pos, alive, broken };
+}
+
+function restore(world, snap) {
+  const P = world.particles;
+  for (let i = 0; i < P.length; i++) {
+    const p = P[i];
+    p.x = snap.pos[i * 2]; p.y = snap.pos[i * 2 + 1];
+    p.px = p.x; p.py = p.y; p.vx = 0; p.vy = 0;
+    p.alive = !!snap.alive[i];
+    p.dmg = 0; p.load = 0; p.ratio = 0;
+  }
+  for (let i = 0; i < world.constraints.length; i++) {
+    world.constraints[i].broken = !!snap.broken[i];
+    world.constraints[i].load = 0;
+  }
+  world.time = 0; world.steps = 0;
+  world.adjDirty = true;
+}
+
+/** 深拷贝世界(用于预测模拟，不污染真实世界) */
+function cloneWorld(world) {
+  const snap = snapshot(world);
+  const w = createWorld(world.groundY);
+  w.buildings = world.buildings.map(b => ({
+    ...b,
+    particles: b.particles.slice(),
+    init: b.init,
+  }));
+  w.particles = world.particles.map(p => ({ ...p }));
+  w.constraints = world.constraints.map(c => ({ ...c }));
+  w.adjDirty = true;
+  restore(w, snap);
+  // restore 会重置 dmg，但 clone 不参与评估，无妨
+  return w;
+}
+</script>
+<script>
+/* ==========================================================================
+   拆楼 DEMOLITION — 关卡数据
+   对应玩法设计文档 4.1「六大关卡原型」，选 5 个做成原型关卡。
+   世界坐标：y 向下为正，GROUND_Y 为地面线，VOX=8 为一格。
+
+   建筑规格
+     x          左边界(世界坐标)
+     cols/rows  格数
+     colStep    柱距(格)：柱位于 i=0, colStep, 2*colStep ... 及最右一格
+     floorStep  层高(格)：楼板位于 j % floorStep === 0
+     groundOpen 底部开敞层高度(格)：只有柱脚落地 —— 这是"切断承重柱"能生效的前提
+     core       核心筒所在列区间(可选)
+   ========================================================================== */
+'use strict';
+
+const GROUND_Y = 460;
+
+/* 炸药类型表 -------------------------------------------------------------- */
+const CHARGES = {
+  cut: {
+    key: 'cut', name: '定向切割', short: '切', cost: 1, radius: 7, push: 0, power: 1.0,
+    color: '#ff8a3d', desc: '精确切断一根承重柱(半径 7)',
+  },
+  line: {
+    key: 'line', name: '线性切割', short: '线', cost: 3, radius: 7, push: 0, power: 1.0,
+    color: '#ffd23f', desc: '拖拽画一条切割线，一次切断整排柱子',
+  },
+  push: {
+    key: 'push', name: '冲击装药', short: '推', cost: 2, radius: 30, push: 260, power: 0.5,
+    color: '#4dd2ff', desc: '侧向推力，用于「推」楼或推开废墟',
+  },
+};
+
+const LEVELS = [
+  /* ---------------------------------------------------------------- 1 */
+  {
+    name: '01 · 定向倒塌',
+    tag: '教学 · 起爆顺序',
+    brief: '西边是空地。把整栋仓库放倒向西，别碰到东边的配电房。',
+    lesson: '规律：你炸哪一侧的柱脚，楼就朝哪一侧倒。先炸西侧那排柱脚，西侧失去支撑先下沉，楼便绕东侧柱根旋转、整栋拍向西面；反过来炸东侧它就往东倒。',
+    budget: 8,
+    collapseMin: 0.90,
+    neighborMax: 0.05,
+    zoneLabel: '西侧空地',
+    dir: { mode: 'zone', x0: 170, x1: 340 },
+    buildings: [
+      { name: '废旧仓库', kind: 'target', x: 360, cols: 5, rows: 21, colStep: 4, floorStep: 3, groundOpen: 6 },
+      { name: '配电房', kind: 'protected', x: 600, cols: 5, rows: 7, colStep: 2, floorStep: 3, groundOpen: 3 },
+    ],
+  },
+
+  /* ---------------------------------------------------------------- 2 */
+  {
+    name: '02 · 原地下沉',
+    tag: '教学 · 对称同步',
+    brief: '西侧紧邻地铁隧道。楼必须原地「坐塌」，不许向任何一边倒。',
+    lesson: '底部所有柱脚必须【同时】起爆，荷载均匀失效，楼才会垂直塌落。只要有一点先后差，楼就会朝先爆的一侧倾覆。',
+    budget: 12,
+    collapseMin: 0.90,
+    neighborMax: 0.05,
+    zoneLabel: '原地坍塌区',
+    dir: { mode: 'zone', x0: 450, x1: 496 },
+    buildings: [
+      { name: '旧商住楼', kind: 'target', x: 420, cols: 13, rows: 20, colStep: 4, floorStep: 4, groundOpen: 4 },
+    ],
+  },
+
+  /* ---------------------------------------------------------------- 3 */
+  {
+    name: '03 · 夹缝作业',
+    tag: '教学 · 极限精度',
+    brief: '目标楼东侧紧贴历史档案馆，空隙只有 1 格。只能向西倒，且档案馆一道裂缝都不能有。',
+    lesson: '只能向西倒，所以只能动西侧那排柱脚——一根都不能多切。东侧那排既是「铰点」，也是你和档案馆之间唯一的缓冲；切了它，楼就直接拍在档案馆身上。',
+    budget: 10,
+    collapseMin: 0.90,
+    neighborMax: 0.012,
+    zoneLabel: '西侧空地',
+    dir: { mode: 'zone', x0: 240, x1: 360 },
+    buildings: [
+      { name: '目标楼', kind: 'target', x: 416, cols: 5, rows: 21, colStep: 4, floorStep: 3, groundOpen: 6 },
+      { name: '历史档案馆', kind: 'protected', x: 464, cols: 5, rows: 13, colStep: 4, floorStep: 3, groundOpen: 4 },
+    ],
+  },
+
+  /* ---------------------------------------------------------------- 4 */
+  {
+    name: '04 · 连连看',
+    tag: '教学 · 复杂时序',
+    brief: '拆迁区三栋旧楼，要在同一次起爆里全部放倒，每栋都要向东倒向堆场。',
+    lesson: '要向东倒，就切每栋东侧的柱脚。三栋按从西到东依次起爆，前排放倒的冲击正好把后排的支撑提前带走，一栋接一栋。',
+    budget: 16,
+    collapseMin: 0.88,
+    neighborMax: 0.06,
+    zoneLabel: '每栋向东位移 ≥ 25',
+    dir: { mode: 'drift', min: 25, max: 999 },
+    buildings: [
+      { name: '甲栋', kind: 'target', x: 170, cols: 5, rows: 15, colStep: 4, floorStep: 3, groundOpen: 6 },
+      { name: '乙栋', kind: 'target', x: 310, cols: 5, rows: 15, colStep: 4, floorStep: 3, groundOpen: 6 },
+      { name: '丙栋', kind: 'target', x: 450, cols: 5, rows: 18, colStep: 4, floorStep: 3, groundOpen: 6 },
+      { name: '传达室', kind: 'protected', x: 80, cols: 4, rows: 7, colStep: 3, floorStep: 3, groundOpen: 3 },
+    ],
+  },
+
+  /* ---------------------------------------------------------------- 5 */
+  {
+    name: '05 · 保护性拆除',
+    tag: '终章 · 极限控制',
+    brief: '东侧 1 格就是重症监护室，里面还有病人。整栋楼必须原地塌落，监护室损伤率必须接近 0。',
+    lesson: '三排柱脚必须【同时】起爆：荷载无处转移，结构只能笔直往下砸，废墟原封不动落在原地。任何先后差都会让楼失衡倒向一侧——而东侧一格就是重症监护室。',
+    budget: 12,
+    collapseMin: 0.92,
+    neighborMax: 0.004,
+    zoneLabel: '原地坍塌区',
+    dir: { mode: 'zone', x0: 395, x1: 440 },
+    buildings: [
+      { name: '待拆住院楼', kind: 'target', x: 380, cols: 9, rows: 20, colStep: 4, floorStep: 4, groundOpen: 4 },
+      { name: '重症监护室', kind: 'protected', x: 460, cols: 5, rows: 9, colStep: 2, floorStep: 4, groundOpen: 3 },
+    ],
+  },
+];
+</script>
+<script>
+/* ==========================================================================
+   拆楼 DEMOLITION — 程序化音效（WebAudio 合成，无需外部素材）
+   文档 7 节：起爆倒计时警报 / 层次感断裂音 / 尘埃低频轰鸣 / 远处惊呼
+   ========================================================================== */
+'use strict';
+
+const Sfx = (() => {
+  let ctx = null, master = null, muted = false;
+
+  function init() {
+    if (ctx) return;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    ctx = new AC();
+    master = ctx.createGain();
+    master.gain.value = 0.55;
+    master.connect(ctx.destination);
+  }
+
+  function resume() { init(); if (ctx && ctx.state === 'suspended') ctx.resume(); }
+
+  function noiseBuffer(dur) {
+    const n = Math.max(1, Math.floor(ctx.sampleRate * dur));
+    const buf = ctx.createBuffer(1, n, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    // 确定性噪声（用线性同余，避免 Math.random 影响可复现性）
+    let s = 12345;
+    for (let i = 0; i < n; i++) {
+      s = (s * 1103515245 + 12345) & 0x7fffffff;
+      d[i] = (s / 0x3fffffff) - 1;
+    }
+    return buf;
+  }
+
+  /** 爆炸：低频冲击 + 噪声爆裂 */
+  function boom(power) {
+    if (!ctx || muted) return;
+    power = power || 1;
+    const t = ctx.currentTime;
+
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuffer(1.6);
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(900, t);
+    lp.frequency.exponentialRampToValueAtTime(90, t + 1.1);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.9 * power, t + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 1.5);
+    src.connect(lp).connect(g).connect(master);
+    src.start(t); src.stop(t + 1.6);
+
+    // 低频轰鸣
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(70, t);
+    osc.frequency.exponentialRampToValueAtTime(26, t + 1.2);
+    const og = ctx.createGain();
+    og.gain.setValueAtTime(0.0001, t);
+    og.gain.exponentialRampToValueAtTime(0.85 * power, t + 0.02);
+    og.gain.exponentialRampToValueAtTime(0.0001, t + 1.3);
+    osc.connect(og).connect(master);
+    osc.start(t); osc.stop(t + 1.4);
+  }
+
+  /** 倒计时警报 */
+  function beep(freq, dur, vol) {
+    if (!ctx || muted) return;
+    const t = ctx.currentTime;
+    const o = ctx.createOscillator();
+    o.type = 'square';
+    o.frequency.value = freq || 720;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime((vol || 0.16), t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + (dur || 0.12));
+    o.connect(g).connect(master);
+    o.start(t); o.stop(t + (dur || 0.12) + 0.02);
+  }
+
+  /** 结构断裂：钢筋呻吟 */
+  function groan() {
+    if (!ctx || muted) return;
+    const t = ctx.currentTime;
+    const o = ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(180 + (t * 37) % 90, t);
+    o.frequency.exponentialRampToValueAtTime(60, t + 0.45);
+    const f = ctx.createBiquadFilter();
+    f.type = 'bandpass'; f.frequency.value = 420; f.Q.value = 4;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.14, t + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
+    o.connect(f).connect(g).connect(master);
+    o.start(t); o.stop(t + 0.55);
+  }
+
+  /** 落地闷响 */
+  function thud() {
+    if (!ctx || muted) return;
+    const t = ctx.currentTime;
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuffer(0.5);
+    const f = ctx.createBiquadFilter();
+    f.type = 'lowpass'; f.frequency.value = 260;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.5, t + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.45);
+    src.connect(f).connect(g).connect(master);
+    src.start(t); src.stop(t + 0.5);
+  }
+
+  /** 远处人群惊呼 */
+  function gasp() {
+    if (!ctx || muted) return;
+    const t = ctx.currentTime;
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuffer(0.9);
+    const f = ctx.createBiquadFilter();
+    f.type = 'bandpass'; f.frequency.setValueAtTime(700, t);
+    f.frequency.linearRampToValueAtTime(1400, t + 0.3);
+    f.Q.value = 1.2;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.05, t + 0.15);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.85);
+    src.connect(f).connect(g).connect(master);
+    src.start(t); src.stop(t + 0.9);
+  }
+
+  return {
+    resume, boom, beep, groan, thud, gasp,
+    toggle() { muted = !muted; if (master) master.gain.value = muted ? 0 : 0.55; return muted; },
+    isMuted: () => muted,
+  };
+})();
+</script>
+<script>
+/* ==========================================================================
+   拆楼 DEMOLITION — 主程序
+   渲染 / 交互 / 时序编辑器 / 起爆流程 / 结算
+   ========================================================================== */
+'use strict';
+
+/* ------------------------------ 调色板 ------------------------------ */
+const PALETTE = {
+  target:    { wall: '#c6beac', column: '#8e8676', slab: '#d4cdbc', core: '#7b7365' },
+  protected: { wall: '#6e7d8c', column: '#54616e', slab: '#7d8c9a', core: '#4b5763' },
+  normal:    { wall: '#7b8794', column: '#5e6a76', slab: '#8a97a4', core: '#55616c' },
+};
+const MAX_DELAY = 4.0;
+
+/* ------------------------------ 全局状态 ------------------------------ */
+const G = {
+  world: null, level: null, levelIndex: 0, initialSnap: null,
+  phase: 'design',                 // design | countdown | live | settle | result
+  charges: [], nextId: 1, selected: 'cut', selCharge: null,
+  drag: null,                      // {mode:'pan'|'charge'|'line', ...}
+  loadView: false, flowView: false, showZone: true,
+  cam: { x: 0, y: 0, zoom: 1 },
+  spent: 0, timeScale: 1, slowUntil: 0, simAcc: 0,
+  countdown: 0, cdShown: 4, allFiredAt: 0,
+  restCount: 0, prevSample: null, lastSampleStep: 0, lastSfxStep: 0, lastFailStep: 0, lastEval: null, stars: 0,
+  fx: [], dust: [], shake: 0, shakeUntil: 0,
+  impactSeen: null,
+  frames: [], frameAcc: 0,
+  replay: { on: false, idx: 0, playing: false, last: 0 },
+  previewPath: null, dirtyLoad: true, loadTick: 0,
+};
+
+/* ------------------------------ 画布 ------------------------------ */
+const cv = document.getElementById('stage');
+const ctx = cv.getContext('2d');
+let VW = 0, VH = 0, DPR = 1;
+
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  VW = cv.clientWidth; VH = cv.clientHeight;
+  cv.width = VW * DPR; cv.height = VH * DPR;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+window.addEventListener('resize', resize);
+
+const toScreen = (x, y) => [(x - G.cam.x) * G.cam.zoom + VW / 2, (y - G.cam.y) * G.cam.zoom + VH / 2];
+const toWorld = (sx, sy) => [(sx - VW / 2) / G.cam.zoom + G.cam.x, (sy - VH / 2) / G.cam.zoom + G.cam.y];
+
+/* ------------------------------ 关卡装载 ------------------------------ */
+function loadLevel(i) {
+  const L = LEVELS[i];
+  G.levelIndex = i; G.level = L;
+  G.world = createWorld(GROUND_Y);
+  for (const spec of L.buildings) {
+    const b = buildBuilding(spec, G.world, GROUND_Y);
+    b.kind = spec.kind;
+    const pal = PALETTE[spec.kind] || PALETTE.normal;
+    for (const pi of b.particles) G.world.particles[pi].baseColor = pal[G.world.particles[pi].mat];
+  }
+  analyzeLoad(G.world); calibrateLoad(G.world); analyzeLoad(G.world);
+  G.initialSnap = snapshot(G.world);
+
+  G.charges = []; G.nextId = 1; G.selCharge = null; G.spent = 0;
+  G.previewPath = null; G.phase = 'design'; G.frames = [];
+  G.fx = []; G.replay.on = false; G.stars = 0;
+  fitCamera();
+
+  document.getElementById('levelName').textContent = L.name;
+  document.getElementById('levelTag').textContent = L.tag;
+  document.getElementById('brief').textContent = L.brief;
+  document.getElementById('loadHint').textContent =
+    '开启后可看到每根构件的荷载利用率。红柱一旦失稳，会连锁压溃。';
+  document.getElementById('result').classList.add('hidden');
+  document.getElementById('menu').classList.add('hidden');
+  document.getElementById('tutorial').classList.add('hidden');
+  document.getElementById('btnFire').disabled = false;
+  document.getElementById('btnFire').textContent = '▶ 起爆';
+
+  renderChargePalette();
+  renderPlaced();
+  renderTimeline();
+  updateHUD();
+}
+
+function fitCamera() {
+  const w = G.world;
+  let minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9;
+  for (const p of w.particles) {
+    if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
+    if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
+  }
+  minX -= 90; maxX += 90; maxY += 40; minY -= 30;
+  G.cam.x = (minX + maxX) / 2;
+  G.cam.y = (minY + maxY) / 2;
+  const availW = VW - 300, availH = VH - 210;
+  G.cam.zoom = Math.min(availW / (maxX - minX), availH / (maxY - minY));
+  G.cam.zoom = Math.max(0.25, Math.min(2.6, G.cam.zoom));
+}
+
+/* ------------------------------ 炸药库 UI ------------------------------ */
+function renderChargePalette() {
+  const box = document.getElementById('chargeList');
+  box.innerHTML = '';
+  for (const k in CHARGES) {
+    const c = CHARGES[k];
+    const d = document.createElement('div');
+    d.className = 'chg' + (G.selected === k ? ' on' : '');
+    d.innerHTML = `<span class="dot" style="background:${c.color}">${c.short}</span>
+      <span class="info"><span class="nm">${c.name}</span><span class="sub">${c.desc}</span></span>
+      <span class="price">¥${c.cost}</span>`;
+    d.onclick = () => { G.selected = k; G.selCharge = null; renderChargePalette(); };
+    box.appendChild(d);
+  }
+  document.getElementById('chargeDesc').textContent =
+    G.selected === 'line' ? '在画面上按住左键拖拽画线，松开即布置。' : '在画面上点击建筑即可布置。';
+}
+
+function chargeCost(ch) {
+  if (ch.type === 'line') {
+    const len = Math.hypot(ch.x2 - ch.x1, ch.y2 - ch.y1);
+    return Math.max(2, Math.round(CHARGES.line.cost + len / 60));
+  }
+  return CHARGES[ch.type].cost;
+}
+
+function totalSpent() {
+  let s = 0;
+  for (const ch of G.charges) s += ch.cost;
+  return s;
+}
+
+function addCharge(ch) {
+  const base = CHARGES[ch.type] || CHARGES.cut;
+  const merged = Object.assign({}, base, ch);   // 带上 radius / push / power
+  merged.id = G.nextId++;
+  merged.delay = merged.delay || 0;
+  merged.cost = chargeCost(merged);
+  G.charges.push(merged);
+  G.spent = totalSpent();
+  renderPlaced(); renderTimeline(); updateHUD();
+  return merged;
+}
+
+function removeCharge(id) {
+  G.charges = G.charges.filter(c => c.id !== id);
+  if (G.selCharge === id) G.selCharge = null;
+  G.spent = totalSpent();
+  renderPlaced(); renderTimeline(); updateHUD();
+}
+
+function renderPlaced() {
+  const box = document.getElementById('placedList');
+  if (!G.charges.length) { box.innerHTML = '<p class="empty">还没有布置炸药</p>'; return; }
+  box.innerHTML = '';
+  const sorted = G.charges.slice().sort((a, b) => a.delay - b.delay);
+  for (const ch of sorted) {
+    const d = document.createElement('div');
+    d.className = 'pitem';
+    d.innerHTML = `<span class="dot" style="background:${CHARGES[ch.type].color}"></span>
+      <span class="nm">${CHARGES[ch.type].name} #${ch.id}</span>
+      <span class="tm">${ch.delay.toFixed(1)}s</span>
+      <span class="del" data-id="${ch.id}">✕</span>`;
+    d.querySelector('.del').onclick = e => { e.stopPropagation(); removeCharge(ch.id); };
+    box.appendChild(d);
+  }
+}
+
+/* ------------------------------ 时序编辑器 ------------------------------ */
+function renderTimeline() {
+  const track = document.getElementById('tlTrack');
+  const notes = document.getElementById('tlNotes');
+  notes.innerHTML = '';
+  for (const ch of G.charges) {
+    const n = document.createElement('div');
+    n.className = 'note' + (G.selCharge === ch.id ? ' sel' : '');
+    n.style.left = (ch.delay / MAX_DELAY * 100) + '%';
+    n.style.transform = 'translateX(-50%)';
+    n.style.background = CHARGES[ch.type].color;
+    n.dataset.id = ch.id;
+    n.innerHTML = `${ch.id}<span class="t">${ch.delay.toFixed(1)}</span>`;
+    n.addEventListener('pointerdown', e => {
+      if (G.phase !== 'design') return;
+      e.stopPropagation();
+      n.setPointerCapture(e.pointerId);
+      n.classList.add('dragging');
+      G.selCharge = ch.id;
+      const move = ev => {
+        const r = notes.getBoundingClientRect();
+        let t = (ev.clientX - r.left) / r.width * MAX_DELAY;
+        t = Math.max(0, Math.min(MAX_DELAY, Math.round(t * 10) / 10));
+        ch.delay = t;
+        n.style.left = (t / MAX_DELAY * 100) + '%';
+        n.style.transform = 'translateX(-50%)';
+        n.querySelector('.t').textContent = t.toFixed(1);
+        renderPlaced();
+      };
+      const up = () => {
+        n.classList.remove('dragging');
+        window.removeEventListener('pointermove', move);
+        window.removeEventListener('pointerup', up);
+        renderTimeline();
+      };
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', up);
+    });
+    notes.appendChild(n);
+  }
+  const scale = document.getElementById('tlScale');
+  if (!scale.children.length) {
+    scale.innerHTML = '<span>0.0s</span><span>1.0s</span><span>2.0s</span><span>3.0s</span><span>4.0s</span>';
+  }
+}
+
+/* ------------------------------ HUD ------------------------------ */
+function updateHUD() {
+  const L = G.level; if (!L) return;
+  const set = (id, html, cls) => {
+    const el = document.getElementById(id);
+    el.className = 'obj' + (cls ? ' ' + cls : '');
+    el.querySelector('i').innerHTML = html;
+  };
+  set('objCollapse', `≥ ${(L.collapseMin * 100).toFixed(0)}%`);
+  set('objNeighbor', `≤ ${(L.neighborMax * 100).toFixed(1)}%`);
+  set('objDir', L.dir.mode === 'drift' ? L.zoneLabel : (L.zoneLabel || '—'));
+  const pct = G.spent / L.budget;
+  set('objBudget', `¥${G.spent} / ${L.budget}`,
+    pct > 1 ? 'bad' : pct > 0.85 ? 'warn' : 'ok');
+  document.getElementById('btnFire').disabled = G.charges.length === 0 || G.phase !== 'design';
+}
+
+/* ------------------------------ 起爆流程 ------------------------------ */
+function startDetonation() {
+  if (G.phase !== 'design' || !G.charges.length) return;
+  Sfx.resume();
+  G.phase = 'countdown';
+  G.countdown = 3.0; G.cdShown = 4;
+  G.simAcc = 0; G.frames = []; G.restCount = 0; G.lastFailStep = 0; G.prevSample = null; G.lastSampleStep = 0; G.lastSfxStep = 0;
+  G.charges.forEach(c => { c.fired = false; });
+  G.chargesByDelay = G.charges.slice().sort((a, b) => a.delay - b.delay);
+  G.maxDelay = G.chargesByDelay[G.chargesByDelay.length - 1].delay;
+  document.getElementById('btnFire').disabled = true;
+  document.getElementById('btnFire').textContent = '起爆中…';
+  G.previewPath = null;
+}
+
+function fireDueCharges() {
+  const list = G.chargesByDelay || [];
+  for (const ch of list) {
+    if (ch.fired) continue;
+    if (ch.delay <= G.world.time + 1e-9) {
+      ch.fired = true;
+      applyCharge(G.world, ch);
+      onChargeFire(ch);
+    }
+  }
+}
+
+function onChargeFire(ch) {
+  const isLine = ch.type === 'line';
+  const cx = isLine ? (ch.x1 + ch.x2) / 2 : ch.x;
+  const cy = isLine ? (ch.y1 + ch.y2) / 2 : ch.y;
+  G.fx.push({ x: cx, y: cy, r: 4, max: isLine ? 70 : 62, t: 0, life: 0.55, color: CHARGES[ch.type].color });
+  G.shake = 5; G.shakeUntil = performance.now() + 320;
+  G.slowUntil = performance.now() + 330;
+  Sfx.boom(1);
+  G.dirtyLoad = true;
+}
+
+/* 扬尘效果：纯视觉层，由"高速粒子触地"触发，不影响物理 */
+let dustSeen = null;
+function spawnDust(world) {
+  const P = world.particles;
+  if (!dustSeen || dustSeen.length !== P.length) dustSeen = new Uint8Array(P.length);
+  let n = 0;
+  for (let i = 0; i < P.length; i++) {
+    const p = P[i];
+    if (!p.alive || dustSeen[i]) continue;
+    if (p.ground && (p.vyPre || 0) > VOX * 5) {
+      dustSeen[i] = 1; n++;
+      if (G.dust.length < 900) {
+        for (let k = 0; k < 3; k++) {
+          G.dust.push({
+            x: p.x + (i % 5 - 2) * 3, y: p.y - 2, vx: p.vx * 0.30 + (i % 9 - 4) * 9,
+            vy: -Math.abs(p.vyPre) * 0.12 - (i % 6) * 11 - k * 5,
+            r: 4 + (i % 4) * 3, life: 1.6 + (i % 5) * 0.3, t: 0, seed: i,
+          });
+        }
+      }
+    }
+  }
+  return n;
+}
+function stepDust(dt) {
+  for (let i = G.dust.length - 1; i >= 0; i--) {
+    const d = G.dust[i];
+    d.t += dt;
+    if (d.t > d.life) { G.dust.splice(i, 1); continue; }
+    d.x += d.vx * dt; d.y += d.vy * dt;
+    d.vy += 26 * dt; d.vx *= 0.965; d.vy *= 0.965;
+  }
+}
+
+/* ------------------------------ 主循环 ------------------------------ */
+let lastFrame = 0;
+function loop(now) {
+  const dt = Math.min((now - lastFrame) / 1000 || 0, 0.05);
+  lastFrame = now;
+
+  if (G.phase === 'countdown') {
+    G.countdown -= dt;
+    const c = Math.ceil(G.countdown);
+    if (c < G.cdShown && c >= 1) { G.cdShown = c; Sfx.beep(760, 0.13, 0.16); }
+    if (G.countdown <= 0) {
+      G.phase = 'live'; G.maxTime = G.maxDelay + 9;
+      Sfx.beep(1180, 0.35, 0.24);
+      G.slowUntil = performance.now() + 260;
+    }
+  } else if (G.phase === 'live') {
+    const slow = now < G.slowUntil;
+    G.timeScale = slow ? 0.22 : 1.0;
+    G.simAcc += dt * G.timeScale;
+    let guard = 0;
+    while (G.simAcc >= DT && guard < 24) {
+      fireDueCharges();
+      step(G.world);
+      // 结构失效(超载压溃)分析，低频执行
+      if (G.world.steps - G.lastFailStep >= 6) {
+        const n = G.world.steps - G.lastFailStep;
+        G.lastFailStep = G.world.steps;
+        if (G.dirtyLoad) { analyzeLoad(G.world); G.dirtyLoad = false; }
+        if (structuralFailure(G.world, DT * n)) G.dirtyLoad = true;
+      }
+      // 录音回放帧
+      G.frameAcc += DT;
+      if (G.frameAcc >= 1 / 20) { recordFrame(); G.frameAcc = 0; }
+
+      G.simAcc -= DT; guard++;
+    }
+    if (guard >= 24) G.simAcc = 0;
+
+    // 静止判定：用"位置漂移"而不是速度，避免废墟堆叠抖动造成永远判不出静止。
+    // 注意用计数器而不是 steps % N —— 每帧步数不均时取模判定会被跳过。
+    if (G.world.steps - G.lastSampleStep >= 24) {
+      G.lastSampleStep = G.world.steps;
+      const cur = samplePositions(G.world);
+      if (G.prevSample) {
+        const drift = maxDrift(G.world, G.prevSample);
+        if (drift < VOX * 0.32 && G.world.time > G.maxDelay + 0.45) G.restCount++;
+        else G.restCount = 0;
+      }
+      G.prevSample = cur;
+    }
+
+    // 落地音效 / 结构断裂呻吟
+    if (G.world.steps - G.lastSfxStep >= 120) {
+      G.lastSfxStep = G.world.steps;
+      const r = worldRoughness();
+      if (r > 0.02) { Sfx.groan(); if (r > 0.06) Sfx.thud(); }
+    }
+    // 结束条件
+    if (G.restCount >= 3 || G.world.time > G.maxTime) {
+      G.phase = 'settle';
+      analyzeLoad(G.world);
+      setTimeout(finish, 420);
+    }
+  } else if (G.phase === 'settle') {
+    // 让尘埃落定，镜头拉远
+    G.cam.zoom += (Math.max(0.3, G.cam.zoom * 0.9) - G.cam.zoom) * 0.04;
+  }
+
+  // 扬尘
+  if (G.phase === 'live' || G.phase === 'settle') { spawnDust(G.world); stepDust(dt); }
+  else if (G.phase === 'design' || G.phase === 'countdown') { G.dust.length = 0; dustSeen = null; }
+  else stepDust(dt);
+
+  // 镜头跟随：让废墟始终留在画面里
+  if (G.phase === 'live' || G.phase === 'settle' || G.phase === 'replay') {
+    const tg = targetFocus();
+    if (tg) {
+      G.cam.x += (tg.x - G.cam.x) * 0.022;
+      G.cam.y += (tg.y - G.cam.y) * 0.022;
+    }
+  }
+
+  if (G.replay.on && G.replay.playing) stepReplay(now);
+
+  // 特效
+  for (let i = G.fx.length - 1; i >= 0; i--) {
+    const f = G.fx[i]; f.t += dt;
+    if (f.t > f.life) G.fx.splice(i, 1);
+  }
+  if (G.phase === 'design' && (G.loadView || G.flowView)) {
+    G.loadTick++;
+    if (G.loadTick % 4 === 0) analyzeLoad(G.world);
+  }
+
+  draw();
+  updateTimelinePlayhead();
+  requestAnimationFrame(loop);
+}
+
+function targetFocus() {
+  const w = G.world;
+  let n = 0, sx = 0, sy = 0, mnx = 1e9, mxx = -1e9, mny = 1e9, mxy = -1e9;
+  for (const b of w.buildings) {
+    if (b.kind !== 'target') continue;
+    for (const pi of b.particles) {
+      const p = w.particles[pi];
+      if (!p.alive) continue;
+      n++; sx += p.x; sy += p.y;
+      if (p.x < mnx) mnx = p.x; if (p.x > mxx) mxx = p.x;
+      if (p.y < mny) mny = p.y; if (p.y > mxy) mxy = p.y;
+    }
+  }
+  if (!n) return null;
+  return { x: (mnx + mxx) / 2, y: (mny + mxy) / 2 };
+}
+
+function worldRoughness() {
+  const P = G.world.particles;
+  let s = 0;
+  for (let i = 0; i < P.length; i++) {
+    const p = P[i];
+    if (!p.alive) continue;
+    s += Math.abs(p.vx) + Math.abs(p.vy);
+  }
+  return s / (P.length * MAX_SPEED);
+}
+
+function recordFrame() {
+  const P = G.world.particles, n = P.length;
+  const pos = new Float32Array(n * 2);
+  const alive = new Uint8Array(n);
+  for (let i = 0; i < n; i++) {
+    pos[i * 2] = P[i].x; pos[i * 2 + 1] = P[i].y;
+    alive[i] = P[i].alive ? 1 : 0;
+  }
+  G.frames.push({ pos, alive });
+}
+
+function stepReplay(now) {
+  const dtR = (now - G.replay.last) / 1000;
+  G.replay.last = now;
+  G.replay.acc = (G.replay.acc || 0) + dtR * 20;
+  while (G.replay.acc >= 1) {
+    G.replay.acc -= 1;
+    if (G.replay.idx < G.frames.length - 1) G.replay.idx++;
+    else { G.replay.playing = false; break; }
+  }
+}
+
+function updateTimelinePlayhead() {
+  const head = document.getElementById('tlHead');
+  const t = G.replay.on ? G.replay.idx / 20
+    : (G.phase === 'design' || G.phase === 'countdown' ? 0 : G.world.time);
+  if (G.phase === 'design' && !G.replay.on) { head.style.opacity = 0; return; }
+  head.style.opacity = 1;
+  head.style.left = Math.min(100, t / MAX_DELAY * 100) + '%';
+  document.getElementById('tlTime').textContent = 't = ' + t.toFixed(1) + 's';
+}
+
+/* ------------------------------ 结算 ------------------------------ */
+function finish() {
+  const e = evaluate(G.world, G.level);
+  G.lastEval = e;
+  const L = G.level;
+  Sfx.gasp();
+  const success = e.collapse >= L.collapseMin && e.neighbor <= L.neighborMax && e.zoneOK;
+  let stars = 0;
+  if (success) {
+    stars = 1;
+    if (G.spent <= Math.ceil(L.budget * 0.85)) stars = 2;
+    if (G.spent <= Math.ceil(L.budget * 0.62)) stars = 3;
+  } else if (e.collapse >= L.collapseMin * 0.75 && e.neighbor <= L.neighborMax * 1.4) {
+    stars = 0;
+  }
+  G.stars = stars;
+  G.phase = 'result';
+  showResult(e, success, stars);
+}
+
+function showResult(e, success, stars) {
+  const L = G.level;
+  document.getElementById('resStars').innerHTML =
+    [1, 2, 3].map(i => i <= stars ? '★' : '<span class="off">★</span>').join('');
+  document.getElementById('resTitle').textContent =
+    success ? (stars === 3 ? '教科书级爆破' : stars === 2 ? '拆除完成' : '勉强达标') : '拆除失败';
+
+  const row = (label, val, ok) =>
+    `<li class="${ok === null ? 'info' : ok ? 'ok' : 'bad'}"><span>${label}</span><span>${val}</span></li>`;
+  const list = [];
+  list.push(row('目标楼倒塌率', (e.collapse * 100).toFixed(1) + '% / ≥' + (L.collapseMin * 100).toFixed(0) + '%',
+    e.collapse >= L.collapseMin));
+  list.push(row('邻栋损伤', (e.neighbor * 100).toFixed(2) + '% / ≤' + (L.neighborMax * 100).toFixed(1) + '%',
+    e.neighbor <= L.neighborMax));
+  if (L.dir.mode === 'drift') {
+    list.push(row('倒塌方向（向东位移）',
+      e.dirInfo.map(d => `${d.name} ${d.drift >= 0 ? '+' : ''}${d.drift.toFixed(0)}`).join('  '), e.zoneOK));
+  } else {
+    list.push(row('上部落点', `x = ${e.topCentroidX.toFixed(0)} / 目标 ${L.dir.x0}~${L.dir.x1}`, e.zoneOK));
+  }
+  list.push(row('预算消耗', `¥${G.spent} / ${L.budget}`, G.spent <= L.budget));
+  list.push(row('起爆时长', G.world.time.toFixed(1) + 's', null));
+  document.getElementById('resList').innerHTML = list.join('');
+
+  // 红线 2：失败必须可解释
+  let why = '';
+  if (success) {
+    why = stars === 3
+      ? '完美。你用的炸药比预算少了近四成——这是工程师的胜利。'
+      : '楼塌了，邻栋保住了。省一点炸药，还能再拿一颗星。';
+  } else if (e.collapse < L.collapseMin) {
+    why = `倒塌率只有 ${(e.collapse * 100).toFixed(0)}%。原因：切断的承重构件不足以让上部结构失去支撑。` +
+      `打开「承重视图」找红色柱体，或加大切割范围、延长后续装药的延时让结构继续失稳。`;
+  } else if (e.neighbor > L.neighborMax) {
+    why = `邻栋损伤 ${(e.neighbor * 100).toFixed(1)}%，超标了。原因：倒塌过程中向受保护建筑一侧产生了横向挤压或抛掷。` +
+      `减少该侧装药，或改为「原地塌落」把势能全部导向垂直方向。`;
+  } else {
+    why = `方向偏了：楼体上部的落点在 x=${e.topCentroidX.toFixed(0)}，不在目标区。原因：两侧支撑失效不同步。` +
+      `记住规律——你炸哪一侧的柱脚，楼就朝哪一侧倒。想让它往西倒，就只切西侧那排柱脚。`;
+  }
+  document.getElementById('resWhy').textContent = why;
+
+  document.getElementById('result').classList.remove('hidden');
+  document.getElementById('btnFire').disabled = false;
+  document.getElementById('btnFire').textContent = '▶ 起爆';
+}
+
+/* ------------------------------ 交互 ------------------------------ */
+/* 吸附到最近的构件：让"精确切断一根柱子"这件事变得可操作 */
+function snapToStructure(wx, wy, maxDist) {
+  const R = maxDist || VOX * 1.3;
+  let best = null, bd = R * R;
+  const P = G.world.particles;
+  for (let i = 0; i < P.length; i++) {
+    const p = P[i];
+    if (!p.alive) continue;
+    const dx = p.x - wx, dy = p.y - wy;
+    const d2 = dx * dx + dy * dy;
+    if (d2 < bd) { bd = d2; best = p; }
+  }
+  return best ? { x: best.x, y: best.y, p: best } : { x: wx, y: wy, p: null };
+}
+
+function pickChargeAt(sx, sy) {
+  const R = 15;
+  for (let i = G.charges.length - 1; i >= 0; i--) {
+    const ch = G.charges[i];
+    if (ch.type === 'line') {
+      const [x1, y1] = toScreen(ch.x1, ch.y1), [x2, y2] = toScreen(ch.x2, ch.y2);
+      if (distSeg(sx, sy, x1, y1, x2, y2) < R) return ch;
+    } else {
+      const [x, y] = toScreen(ch.x, ch.y);
+      if (Math.hypot(sx - x, sy - y) < R) return ch;
+    }
+  }
+  return null;
+}
+function distSeg(px, py, x1, y1, x2, y2) {
+  const dx = x2 - x1, dy = y2 - y1, l2 = dx * dx + dy * dy || 1;
+  let t = ((px - x1) * dx + (py - y1) * dy) / l2;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
+}
+
+cv.addEventListener('contextmenu', e => e.preventDefault());
+
+cv.addEventListener('pointerdown', e => {
+  if (G.replay.on) return;
+  const r = cv.getBoundingClientRect();
+  const sx = e.clientX - r.left, sy = e.clientY - r.top;
+
+  if (e.button === 2 || e.button === 1) {
+    G.drag = { mode: 'pan', sx, sy, cx: G.cam.x, cy: G.cam.y, moved: 0 };
+    cv.setPointerCapture(e.pointerId);
+    return;
+  }
+  if (e.button !== 0) return;
+  if (G.phase !== 'design') return;
+
+  const hit = pickChargeAt(sx, sy);
+  if (hit) {
+    G.selCharge = hit.id;
+    G.drag = { mode: 'moveCharge', id: hit.id, moved: 0 };
+    cv.setPointerCapture(e.pointerId);
+    renderTimeline();
+    return;
+  }
+
+  const [wx0, wy0] = toWorld(sx, sy);
+  const snap = snapToStructure(wx0, wy0);
+  const wx = snap.x, wy = snap.y;
+  if (G.selected === 'line') {
+    G.drag = { mode: 'line', x1: wx, y1: wy, x2: wx, y2: wy };
+    cv.setPointerCapture(e.pointerId);
+  } else {
+    const c = CHARGES[G.selected];
+    if (totalSpent() + c.cost > G.level.budget) { flashBudget(); return; }
+    addCharge({ type: G.selected, x: wx, y: wy });
+    Sfx.beep(1180, 0.05, 0.07);
+  }
+});
+
+cv.addEventListener('pointermove', e => {
+  const r = cv.getBoundingClientRect();
+  const sx = e.clientX - r.left, sy = e.clientY - r.top;
+  if (!G.drag) {
+    const [hx, hy] = toWorld(sx, sy);
+    G.hover = G.phase === 'design' ? snapToStructure(hx, hy) : null;
+  }
+  if (G.drag) {
+    const d = G.drag;
+    if (d.mode === 'pan') {
+      d.moved += Math.abs(e.movementX) + Math.abs(e.movementY);
+      G.cam.x = d.cx - (sx - d.sx) / G.cam.zoom;
+      G.cam.y = d.cy - (sy - d.sy) / G.cam.zoom;
+    } else if (d.mode === 'line') {
+      const [wx, wy] = toWorld(sx, sy);
+      const s = snapToStructure(wx, wy);
+      d.x2 = s.x; d.y2 = s.y;
+    } else if (d.mode === 'moveCharge') {
+      const ch = G.charges.find(c => c.id === d.id);
+      if (ch) {
+        const [wx0, wy0] = toWorld(sx, sy);
+        const s = snapToStructure(wx0, wy0);
+        d.moved++;
+        if (ch.type === 'line') {
+          const dx = ch.x2 - ch.x1, dy = ch.y2 - ch.y1;
+          ch.x1 = s.x; ch.y1 = s.y; ch.x2 = s.x + dx; ch.y2 = s.y + dy;
+        } else { ch.x = s.x; ch.y = s.y; }
+        ch.cost = chargeCost(ch);
+        G.spent = totalSpent(); updateHUD();
+      }
+    }
+  }
+});
+
+cv.addEventListener('pointerup', e => {
+  const d = G.drag; G.drag = null;
+  if (!d) return;
+  if (d.mode === 'pan') {
+    if (d.moved < 5) {                     // 未移动 => 视为右键点击(删除)
+      const r = cv.getBoundingClientRect();
+      const hit = pickChargeAt(e.clientX - r.left, e.clientY - r.top);
+      if (hit) removeCharge(hit.id);
+    }
+  } else if (d.mode === 'line') {
+    const len = Math.hypot(d.x2 - d.x1, d.y2 - d.y1);
+    if (len < 10) return;
+    const cost = Math.max(2, Math.round(CHARGES.line.cost + len / 60));
+    if (totalSpent() + cost > G.level.budget) { flashBudget(); return; }
+    addCharge({ type: 'line', x1: d.x1, y1: d.y1, x2: d.x2, y2: d.y2 });
+  } else if (d.mode === 'moveCharge') {
+    renderPlaced();
+  }
+});
+
+cv.addEventListener('pointerleave', () => { G.hover = null; G.drag = null; });
+
+cv.addEventListener('wheel', e => {
+  e.preventDefault();
+  const r = cv.getBoundingClientRect();
+  const sx = e.clientX - r.left, sy = e.clientY - r.top;
+  const [wx, wy] = toWorld(sx, sy);
+  const f = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+  G.cam.zoom = Math.max(0.22, Math.min(4, G.cam.zoom * f));
+  const [nx, ny] = toWorld(sx, sy);
+  G.cam.x += wx - nx; G.cam.y += wy - ny;
+}, { passive: false });
+
+window.addEventListener('keydown', e => {
+  if (e.key === 'Delete' || e.key === 'Backspace') {
+    if (G.selCharge != null) { removeCharge(G.selCharge); renderTimeline(); }
+  }
+  if (e.key === '1') { G.selected = 'cut'; renderChargePalette(); }
+  if (e.key === '2') { G.selected = 'line'; renderChargePalette(); }
+  if (e.key === '3') { G.selected = 'push'; renderChargePalette(); }
+  if (e.key === 'l' || e.key === 'L') { toggleLoad(); }
+  if (e.key === ' ') { e.preventDefault(); if (G.phase === 'design') startDetonation(); }
+});
+
+function flashBudget() {
+  const el = document.getElementById('objBudget');
+  el.style.transition = 'none'; el.style.background = 'rgba(255,77,77,0.5)';
+  setTimeout(() => { el.style.transition = 'background .4s'; el.style.background = ''; }, 60);
+}
+
+function toggleLoad() {
+  G.loadView = !G.loadView;
+  document.getElementById('swLoad').checked = G.loadView;
+  if (G.loadView) analyzeLoad(G.world);
+}
+
+/* ------------------------------ 绘制 ------------------------------ */
+// 承重视图色带：绿(安全) → 黄 → 橙 → 红(临界) → 白(已超载)
+// 标定后完好状态的最高利用率约 0.5，正好落在黄色，留出可见的红区余量
+const COL_STOPS = [
+  [0.00, [46, 204, 113]], [0.30, [168, 224, 95]], [0.50, [255, 210, 63]],
+  [0.72, [255, 138, 61]], [1.00, [255, 59, 48]], [1.40, [255, 255, 255]],
+];
+const LOAD_PALETTE = (() => {
+  const arr = [];
+  for (let i = 0; i <= 20; i++) {
+    const r = i / 20 * 1.4;
+    arr.push(lerpColor(r));
+  }
+  return arr;
+})();
+function lerpColor(r) {
+  let a = COL_STOPS[0], b = COL_STOPS[COL_STOPS.length - 1];
+  for (let i = 0; i < COL_STOPS.length - 1; i++) {
+    if (r >= COL_STOPS[i][0] && r <= COL_STOPS[i + 1][0]) { a = COL_STOPS[i]; b = COL_STOPS[i + 1]; break; }
+  }
+  const t = (r - a[0]) / (b[0] - a[0] || 1);
+  const c = a[1].map((v, i) => Math.round(v + (b[1][i] - v) * t));
+  return `rgb(${c[0]},${c[1]},${c[2]})`;
+}
+function loadColor(ratio) {
+  const i = Math.max(0, Math.min(20, Math.round(ratio / 1.4 * 20)));
+  return LOAD_PALETTE[i];
+}
+
+function draw() {
+  ctx.clearRect(0, 0, VW, VH);
+
+  // 背景
+  const bg = ctx.createLinearGradient(0, 0, 0, VH);
+  bg.addColorStop(0, '#0a0e14'); bg.addColorStop(0.55, '#111823'); bg.addColorStop(1, '#0c1119');
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, VW, VH);
+
+  // 镜头抖动
+  ctx.save();
+  if (performance.now() < G.shakeUntil) {
+    const k = (G.shakeUntil - performance.now()) / 320;
+    ctx.translate(Math.sin(performance.now() * 0.09) * G.shake * k,
+      Math.cos(performance.now() * 0.13) * G.shake * k);
+  }
+
+  drawSkyline();
+  drawGround();
+  if (G.showZone) drawZone();
+  drawBuildings();
+
+  if (G.replay.on) drawReplay();
+  else {
+    if (G.flowView) drawFlow();
+    drawCharges();
+    if (G.hover && G.hover.p && G.phase === 'design') drawHover();
+    if (G.drag && G.drag.mode === 'line') drawDragLine();
+    if (G.previewPath && G.previewPath.length > 1) drawPreview();
+    drawFx();
+  }
+  drawDust();
+  ctx.restore();
+
+  if (G.phase === 'countdown') drawCountdown();
+  drawScaleBar();
+}
+
+function drawSkyline() {
+  // 远景剪影(简单色块，突出主体建筑)
+  const base = toScreen(0, GROUND_Y)[1];
+  ctx.fillStyle = 'rgba(28,38,52,0.55)';
+  const off = -G.cam.x * G.cam.zoom * 0.35;
+  for (let i = 0; i < 26; i++) {
+    const w = 46 + ((i * 37) % 60);
+    const h = 60 + ((i * 71) % 190);
+    const x = VW / 2 + ((i * 130) % (VW + 600)) - 300 + off % 130;
+    ctx.fillRect(x, base - h, w, h);
+  }
+}
+
+function drawGround() {
+  const [_, gy] = toScreen(0, GROUND_Y);
+  const g = ctx.createLinearGradient(0, gy, 0, VH);
+  g.addColorStop(0, '#232c38'); g.addColorStop(1, '#141a22');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, gy, VW, VH - gy);
+  ctx.strokeStyle = 'rgba(255,160,80,0.35)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(VW, gy); ctx.stroke();
+
+  // 地面刻度
+  ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth = 1;
+  const step = 40 * G.cam.zoom;
+  let x0 = ((G.cam.x - VW / 2 / G.cam.zoom) % 40) * G.cam.zoom;
+  for (let x = -x0; x < VW; x += step) {
+    ctx.beginPath(); ctx.moveTo(x, gy); ctx.lineTo(x, gy + 7); ctx.stroke();
+  }
+}
+
+function drawZone() {
+  const L = G.level;
+  const gy = toScreen(0, GROUND_Y)[1];
+  if (L.dir.mode === 'zone') {
+    const [x0] = toScreen(L.dir.x0, 0), [x1] = toScreen(L.dir.x1, 0);
+    ctx.fillStyle = 'rgba(61,220,132,0.10)';
+    ctx.fillRect(x0, gy - 10, x1 - x0, VH - gy + 10);
+    ctx.strokeStyle = 'rgba(61,220,132,0.6)';
+    ctx.setLineDash([7, 6]); ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(x0, gy); ctx.lineTo(x1, gy); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(61,220,132,0.95)';
+    ctx.font = '600 12px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('✔ ' + (L.zoneLabel || '目标倒塌区'), (x0 + x1) / 2, gy + 20);
+    ctx.textAlign = 'left';
+  } else {
+    // drift 模式：每栋目标楼画一个方向箭头
+    for (const b of G.world.buildings) {
+      if (b.kind !== 'target') continue;
+      const left = b.bx, right = b.bx + b.cols * VOX;
+      const [sx0] = toScreen(right + 6, 0), [sx1] = toScreen(right + 6 + L.dir.min, 0);
+      const sy = toScreen(0, GROUND_Y - b.rows * VOX * 0.45)[1];
+      ctx.strokeStyle = 'rgba(61,220,132,0.75)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(sx0, sy); ctx.lineTo(sx1, sy); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(sx1, sy); ctx.lineTo(sx1 - 9, sy - 5); ctx.lineTo(sx1 - 9, sy + 5);
+      ctx.closePath(); ctx.fillStyle = 'rgba(61,220,132,0.85)'; ctx.fill();
+    }
+  }
+}
+
+function drawBuildings() {
+  const P = G.world.particles;
+  const buckets = new Map();
+  const z = G.cam.zoom, size = VOX * z - (z > 0.7 ? 0.9 : 0);
+  const [cx, cy] = toScreen(0, 0);
+
+  for (let i = 0; i < P.length; i++) {
+    const p = P[i];
+    if (!p.alive) continue;
+    const col = G.loadView ? loadColor(p.ratio || 0) : p.baseColor;
+    const sx = p.x * z + cx - size / 2;
+    const sy = p.y * z + cy - size / 2;
+    if (sx < -20 || sx > VW + 20 || sy < -20 || sy > VH + 20) continue;
+    let arr = buckets.get(col);
+    if (!arr) { arr = []; buckets.set(col, arr); }
+    arr.push(sx, sy, size, size);
+  }
+  for (const [col, arr] of buckets) {
+    ctx.fillStyle = col;
+    for (let k = 0; k < arr.length; k += 4) ctx.fillRect(arr[k], arr[k + 1], arr[k + 2], arr[k + 3]);
+  }
+
+  // 受保护建筑描边提示
+  if (!G.loadView) {
+    ctx.strokeStyle = 'rgba(77,210,255,0.55)';
+    ctx.setLineDash([5, 5]); ctx.lineWidth = 1.4;
+    for (const b of G.world.buildings) {
+      if (b.kind !== 'protected') continue;
+      let minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9, n = 0;
+      for (const pi of b.particles) {
+        const p = P[pi]; if (!p.alive) continue;
+        n++;
+        if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
+        if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
+      }
+      if (!n) continue;
+      const [ax, ay] = toScreen(minX - VOX, minY - VOX);
+      ctx.strokeRect(ax, ay, (maxX - minX + VOX * 2) * G.cam.zoom, (maxY - minY + VOX * 2) * G.cam.zoom);
+    }
+    ctx.setLineDash([]);
+  }
+}
+
+function drawFlow() {
+  const P = G.world.particles, C = G.world.constraints;
+  const [cx, cy] = toScreen(0, 0), z = G.cam.zoom;
+  ctx.lineWidth = 1;
+  for (let i = 0; i < C.length; i++) {
+    const c = C[i];
+    if (c.broken || c.isLong) continue;
+    const a = P[c.a], b = P[c.b];
+    if (!a.alive || !b.alive) continue;
+    const r = Math.min(a.ratio || 0, b.ratio || 0);
+    if (r < 0.35) continue;
+    const al = Math.min(0.75, (r - 0.35) * 0.9);
+    ctx.strokeStyle = `rgba(255,138,61,${al * 0.5})`;
+    ctx.beginPath();
+    ctx.moveTo(a.x * z + cx, a.y * z + cy);
+    ctx.lineTo(b.x * z + cx, b.y * z + cy);
+    ctx.stroke();
+  }
+}
+
+function drawHover() {
+  const p = G.hover.p;
+  const [x, y] = toScreen(p.x, p.y);
+  const s = VOX * G.cam.zoom;
+  const c = CHARGES[G.selected];
+  ctx.save();
+  ctx.strokeStyle = c.color;
+  ctx.lineWidth = 2;
+  ctx.setLineDash([4, 3]);
+  ctx.strokeRect(x - s / 2 - 2, y - s / 2 - 2, s + 4, s + 4);
+  // 覆盖范围提示
+  const rr = (G.selected === 'line' ? CHARGES.line.radius : c.radius) * G.cam.zoom;
+  ctx.setLineDash([]);
+  ctx.globalAlpha = 0.35;
+  ctx.beginPath(); ctx.arc(x, y, rr, 0, Math.PI * 2); ctx.stroke();
+  ctx.globalAlpha = 0.10;
+  ctx.fillStyle = c.color; ctx.fill();
+  ctx.restore();
+  ctx.fillStyle = 'rgba(255,255,255,0.75)';
+  ctx.font = '600 10.5px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  const zh = { column: '承重柱', core: '核心筒', slab: '楼板', wall: '填充墙' }[p.mat] || '';
+  ctx.fillText(zh, x, y - s / 2 - 8);
+  ctx.textAlign = 'left';
+}
+
+function drawCharges() {
+  const z = G.cam.zoom;
+  for (const ch of G.charges) {
+    const c = CHARGES[ch.type];
+    const sel = G.selCharge === ch.id;
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = c.color;
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    if (ch.type === 'line') {
+      const [x1, y1] = toScreen(ch.x1, ch.y1), [x2, y2] = toScreen(ch.x2, ch.y2);
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+      ctx.setLineDash([4, 4]); ctx.lineWidth = 7;
+      ctx.strokeStyle = c.color + '55';
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+      ctx.setLineDash([]);
+    } else {
+      const [x, y] = toScreen(ch.x, ch.y);
+      ctx.beginPath(); ctx.arc(x, y, 13, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.arc(x, y, 4.5, 0, Math.PI * 2);
+      ctx.fillStyle = c.color; ctx.fill();
+      if (sel) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(x, y, 17, 0, Math.PI * 2); ctx.stroke(); }
+      ctx.fillStyle = '#fff';
+      ctx.font = '700 10px system-ui, sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText(ch.delay.toFixed(1) + 's', x, y - 19);
+      ctx.textAlign = 'left';
+    }
+  }
+}
+
+function drawDragLine() {
+  const d = G.drag;
+  const [x1, y1] = toScreen(d.x1, d.y1), [x2, y2] = toScreen(d.x2, d.y2);
+  const len = Math.hypot(d.x2 - d.x1, d.y2 - d.y1);
+  const cost = Math.max(2, Math.round(CHARGES.line.cost + len / 60));
+  ctx.setLineDash([6, 5]);
+  ctx.strokeStyle = CHARGES.line.color; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = '#fff'; ctx.font = '700 11px system-ui';
+  ctx.fillText(`¥${cost}  长 ${(len / VOX).toFixed(1)} 格`, x2 + 8, y2 - 8);
+}
+
+function drawPreview() {
+  const path = G.previewPath;
+  const z = G.cam.zoom, [cx, cy] = toScreen(0, 0);
+  ctx.setLineDash([5, 6]);
+  ctx.strokeStyle = 'rgba(77,210,255,0.85)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  path.forEach((pt, i) => {
+    const x = pt[0] * z + cx, y = pt[1] * z + cy;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+  ctx.setLineDash([]);
+  const last = path[path.length - 1];
+  const [lx, ly] = toScreen(last[0], last[1]);
+  ctx.fillStyle = 'rgba(77,210,255,0.95)';
+  ctx.beginPath(); ctx.arc(lx, ly, 5, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = 'rgba(77,210,255,0.95)';
+  ctx.font = '600 11px system-ui'; ctx.textAlign = 'center';
+  ctx.fillText('预测落点', lx, ly - 12);
+  ctx.textAlign = 'left';
+}
+
+function drawReplay() {
+  const f = G.frames[G.replay.idx];
+  if (!f) return;
+  const z = G.cam.zoom, [cx, cy] = toScreen(0, 0);
+  const size = VOX * z - (z > 0.7 ? 0.9 : 0);
+  const buckets = new Map();
+  const P = G.world.particles;
+  for (let i = 0; i < P.length; i++) {
+    if (!f.alive[i]) continue;
+    const col = P[i].baseColor;
+    let arr = buckets.get(col);
+    if (!arr) { arr = []; buckets.set(col, arr); }
+    arr.push(f.pos[i * 2] * z + cx - size / 2, f.pos[i * 2 + 1] * z + cy - size / 2, size, size);
+  }
+  for (const [col, arr] of buckets) {
+    ctx.fillStyle = col;
+    for (let k = 0; k < arr.length; k += 4) ctx.fillRect(arr[k], arr[k + 1], arr[k + 2], arr[k + 3]);
+  }
+  ctx.fillStyle = 'rgba(255,138,61,0.95)';
+  ctx.font = '700 13px system-ui';
+  ctx.fillText('◉ 回放中  ' + (G.replay.idx / 20).toFixed(1) + 's', 20, VH - 180);
+}
+
+function drawFx() {
+  const z = G.cam.zoom;
+  for (const f of G.fx) {
+    const k = f.t / f.life;
+    const [x, y] = toScreen(f.x, f.y);
+    const r = (f.r + (f.max - f.r) * k) * z;
+    const a = (1 - k);
+    const g = ctx.createRadialGradient(x, y, 0, x, y, Math.max(1, r));
+    g.addColorStop(0, `rgba(255,240,200,${a * 0.9})`);
+    g.addColorStop(0.4, `rgba(255,160,60,${a * 0.55})`);
+    g.addColorStop(1, `rgba(255,90,20,0)`);
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x, y, Math.max(1, r), 0, Math.PI * 2); ctx.fill();
+  }
+}
+
+function drawDust() {
+  if (!G.dust.length) return;
+  const z = G.cam.zoom, [cx, cy] = toScreen(0, 0);
+  const bucket = [[], [], [], []];
+  for (const d of G.dust) {
+    const k = d.t / d.life;
+    const b = k < 0.25 ? 0 : k < 0.5 ? 1 : k < 0.75 ? 2 : 3;
+    const rr = (d.r + k * 16) * z;
+    bucket[b].push(d.x * z + cx, d.y * z + cy, rr);
+  }
+  const alpha = [0.30, 0.22, 0.13, 0.06];
+  for (let i = 0; i < 4; i++) {
+    if (!bucket[i].length) continue;
+    ctx.fillStyle = `rgba(196,186,168,${alpha[i]})`;
+    for (let k = 0; k < bucket[i].length; k += 3) {
+      ctx.beginPath();
+      ctx.arc(bucket[i][k], bucket[i][k + 1], bucket[i][k + 2], 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+}
+
+function drawCountdown() {
+  const c = Math.max(1, Math.ceil(G.countdown));
+  ctx.fillStyle = 'rgba(255,60,60,' + (0.10 + 0.12 * Math.abs(Math.sin(performance.now() * 0.008))) + ')';
+  ctx.fillRect(0, 0, VW, VH);
+  ctx.fillStyle = '#fff';
+  ctx.font = '800 110px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(c, VW / 2, VH / 2 - 30);
+  ctx.font = '700 15px system-ui, sans-serif';
+  ctx.fillStyle = 'rgba(255,138,61,0.95)';
+  ctx.fillText('⚠ 起爆倒计时 · 人员撤离', VW / 2, VH / 2 + 26);
+  ctx.textAlign = 'left';
+}
+
+function drawScaleBar() {
+  const m = 40 * G.cam.zoom;   // 40 世界单位 = 5 格
+  ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.moveTo(24, VH - 168); ctx.lineTo(24 + m, VH - 168);
+  ctx.moveTo(24, VH - 172); ctx.lineTo(24, VH - 164);
+  ctx.moveTo(24 + m, VH - 172); ctx.lineTo(24 + m, VH - 164);
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  ctx.font = '10px system-ui';
+  ctx.fillText('5 格', 30, VH - 174);
+}
+
+/* ------------------------------ 预测 ------------------------------ */
+function runPreview() {
+  const chs = G.charges.slice().sort((a, b) => a.delay - b.delay);
+  if (!chs.length) return;
+  const w = cloneWorld(G.world);
+  const path = [];
+  let fired = 0;
+  const maxT = chs[chs.length - 1].delay + 8.5;
+  for (let s = 0; s < 1500; s++) {
+    while (fired < chs.length && chs[fired].delay <= w.time + 1e-9) { applyCharge(w, chs[fired]); fired++; }
+    step(w);
+    if (s % 5 === 0) {
+      let tx = 0, n = 0;
+      for (const b of w.buildings) {
+        if (b.kind !== 'target') continue;
+        for (const pi of b.particles) { const p = w.particles[pi]; if (p.alive) { tx += p.x; n++; } }
+      }
+      path.push([n ? tx / n : 0, centroidY(w)]);
+    }
+    if (w.time > maxT || (s > 240 && isAtRest(w))) break;
+  }
+  G.previewPath = path;
+}
+function centroidY(w) {
+  let ty = 0, n = 0;
+  for (const b of w.buildings) {
+    if (b.kind !== 'target') continue;
+    for (const pi of b.particles) { const p = w.particles[pi]; if (p.alive) { ty += p.y; n++; } }
+  }
+  return n ? ty / n : w.groundY;
+}
+
+/* ------------------------------ 事件绑定 ------------------------------ */
+document.getElementById('btnFire').onclick = () => { if (G.phase === 'design') startDetonation(); };
+document.getElementById('btnRetry').onclick = () => {
+  restore(G.world, G.initialSnap);
+  analyzeLoad(G.world); calibrateLoad(G.world); analyzeLoad(G.world);
+  G.phase = 'design'; G.simAcc = 0; G.restCount = 0; G.prevSample = null; G.frames = []; G.fx = [];
+  G.replay.on = false; G.previewPath = null;
+  G.charges.forEach(c => { c.fired = false; });
+  G.spent = totalSpent();
+  document.getElementById('result').classList.add('hidden');
+  document.getElementById('btnFire').disabled = G.charges.length === 0;
+  document.getElementById('btnFire').textContent = '▶ 起爆';
+  fitCamera(); updateHUD(); renderPlaced(); renderTimeline();
+};
+document.getElementById('btnClear').onclick = () => {
+  if (G.phase !== 'design') return;
+  G.charges = []; G.spent = 0; G.selCharge = null; G.previewPath = null;
+  renderPlaced(); renderTimeline(); updateHUD();
+};
+document.getElementById('btnPreview').onclick = () => {
+  if (G.phase !== 'design' || !G.charges.length) return;
+  const b = document.getElementById('btnPreview');
+  b.textContent = '计算中…'; b.disabled = true;
+  setTimeout(() => {
+    runPreview();
+    b.textContent = '预测轨迹'; b.disabled = false;
+  }, 30);
+};
+document.getElementById('btnAgain').onclick = () => { document.getElementById('btnRetry').onclick(); };
+document.getElementById('btnNext').onclick = () => {
+  if (G.levelIndex >= LEVELS.length - 1) { openMenu(); return; }
+  const n = G.levelIndex + 1;
+  loadLevel(n);
+  showTutorial(LEVELS[n]);
+};
+document.getElementById('btnReplay').onclick = () => {
+  if (!G.frames.length) return;
+  G.replay.on = true; G.replay.idx = 0; G.replay.playing = true;
+  G.replay.last = performance.now(); G.replay.acc = 0;
+  G.phase = 'replay';
+  document.getElementById('result').classList.add('hidden');
+  const stop = () => {
+    if (!G.replay.playing) { G.replay.on = false; G.phase = 'result'; document.getElementById('result').classList.remove('hidden'); return; }
+    requestAnimationFrame(stop);
+  };
+  requestAnimationFrame(stop);
+};
+document.getElementById('btnMenu').onclick = openMenu;
+document.getElementById('btnMute').onclick = e => { const m = Sfx.toggle(); e.target.textContent = m ? '静音' : '音效'; e.target.style.opacity = m ? .5 : 1; };
+document.getElementById('swLoad').onchange = e => { G.loadView = e.target.checked; if (G.loadView) analyzeLoad(G.world); };
+document.getElementById('swFlow').onchange = e => { G.flowView = e.target.checked; if (G.flowView) analyzeLoad(G.world); };
+document.getElementById('swLabels').onchange = e => { G.showZone = e.target.checked; };
+document.getElementById('swLoad').checked = false;
+document.getElementById('swLabels').checked = true;
+
+document.getElementById('btnHelp').onclick = () => showTutorialText('操作说明',
+  '左键点击建筑放置炸药 · 右键点击炸药删除 · 右键拖动平移 · 滚轮缩放 · 空格起爆 · ' +
+  'Delete 删除选中炸药 · 数字键 1/2/3 切换炸药 · L 切换承重视图。' +
+  '核心是底部的「时序编辑器」：拖动每个炸药下面的数字，决定它第几秒起爆——起爆顺序决定倒塌方向。');
+
+function showTutorial(level) {
+  showTutorialText('设计笔记：' + level.tag, level.lesson);
+}
+function showTutorialText(title, body) {
+  document.getElementById('tutTitle').textContent = title;
+  document.getElementById('tutBody').textContent = body;
+  document.getElementById('tutorial').classList.remove('hidden');
+}
+document.getElementById('tutOk').onclick = () => document.getElementById('tutorial').classList.add('hidden');
+
+function openMenu() {
+  const box = document.getElementById('menuLevels');
+  box.innerHTML = '';
+  LEVELS.forEach((L, i) => {
+    const d = document.createElement('div');
+    d.className = 'mlv';
+    d.innerHTML = `<div class="no">${String(i + 1).padStart(2, '0')}</div><div class="nm">${L.name.split('· ')[1]}</div>`;
+    d.onclick = () => { Sfx.resume(); loadLevel(i); showTutorial(L); };
+    box.appendChild(d);
+  });
+  document.getElementById('menu').classList.remove('hidden');
+  document.getElementById('result').classList.add('hidden');
+}
+
+/* ------------------------------ 启动 ------------------------------ */
+resize();
+loadLevel(0);
+if (location.hash.includes('skipmenu') === false) openMenu();
+requestAnimationFrame(t => { lastFrame = t; loop(t); });
+
+/* 调试接口：供无头测试调用 */
+window.__DEMO__ = {
+  G, LEVELS, loadLevel, startDetonation, evaluate, addCharge, removeCharge, startDetonation,
+  screenOf: (x, y) => toScreen(x, y), snapshotNow: () => snapshot(G.world),
+  /** 加载关卡并布置标准解，供端到端测试 */
+  solve(li) {
+    loadLevel(li);
+    const SOL = [
+      [{ type: 'cut', x: 364, y: 456 }],
+      [424, 456, 488, 520].map(x => ({ type: 'cut', x, y: 456 })),
+      [{ type: 'cut', x: 420, y: 456 }],
+      [{ type: 'cut', x: 206, y: 456 }, { type: 'cut', x: 346, y: 456 }, { type: 'cut', x: 486, y: 456 }],
+      [384, 416, 448].map(x => ({ type: 'cut', x, y: 456 })),
+    ];
+    for (const c of SOL[li]) addCharge(c);
+    return G.charges.length;
+  },
+  /** 无头跑一局：返回评估结果 */
+  run(levelIdx, charges, maxT) {
+    loadLevel(levelIdx);
+    for (const c of charges) addCharge(c);
+    const chs = this.G.charges.slice().sort((a, b) => a.delay - b.delay);
+    const w = this.G.world;
+    let fired = 0;
+    const limit = maxT || (chs.length ? chs[chs.length - 1].delay + 14 : 4);
+    for (let s = 0; s < limit / DT; s++) {
+      while (fired < chs.length && chs[fired].delay <= w.time + 1e-9) { applyCharge(w, chs[fired]); fired++; }
+      step(w);
+      if (w.steps % 6 === 0) {
+        analyzeLoad(w);
+        structuralFailure(w, DT * 6);
+      }
+      if (w.time > (chs.length ? chs[chs.length - 1].delay : 0) + 1.5 && s > 180 && isAtRest(w)) break;
+    }
+    const e = evaluate(w, LEVELS[levelIdx]);
+    return {
+      collapse: +(e.collapse * 100).toFixed(1),
+      neighbor: +(e.neighbor * 100).toFixed(2),
+      centroidX: +e.centroidX.toFixed(1),
+      zone: LEVELS[levelIdx].dir.mode === 'zone' ? [LEVELS[levelIdx].dir.x0, LEVELS[levelIdx].dir.x1] : 'drift',
+      dirInfo: e.dirInfo.map(d => ({ n: d.name, drift: +d.drift.toFixed(1), ok: d.ok })),
+      zoneOK: e.zoneOK,
+      time: +w.time.toFixed(1),
+      steps: w.steps,
+    };
+  },
+  /** 静置测试：不爆任何药，看建筑会不会自塌 */
+  settleTest(levelIdx, seconds) {
+    loadLevel(levelIdx);
+    const w = this.G.world;
+    for (let s = 0; s < (seconds || 5) / DT; s++) step(w);
+    const e = evaluate(w, LEVELS[levelIdx]);
+    return { collapse: +(e.collapse * 100).toFixed(2), neighbor: +(e.neighbor * 100).toFixed(2), time: +w.time.toFixed(1) };
+  },
+};
+</script>
+</body>
+</html>

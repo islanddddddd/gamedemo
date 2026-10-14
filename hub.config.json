@@ -40,5 +40,9 @@
   "小球弹跳": {
     "title": "小球弹跳",
     "entry": "canvas-bounce.html"
+  },
+  "拆楼2D版": {
+    "title": "拆楼2D版",
+    "entry": "index(7).html"
   }
 }
