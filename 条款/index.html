@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>条款 · 地狱合约经理</title>
+<style>
+  :root{
+    --bg:#0d0608; --panel:#1a1014; --panel2:#241419;
+    --ember:#ff7a18; --ember-soft:#ffb066;
+    --blood:#c0264a; --blood-soft:#e0506f;
+    --ink:#f3e9e0; --ink-dim:#9c8a82; --line:#3a2228;
+    --good:#46c98b; --bad:#e0506f;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;font-family:"PingFang SC","Microsoft YaHei",-apple-system,sans-serif;}
+  html,body{height:100%;}
+  body{
+    background:
+      radial-gradient(1200px 600px at 50% -10%, #2a0d12 0%, transparent 60%),
+      radial-gradient(800px 500px at 90% 110%, #1a0a14 0%, transparent 55%), var(--bg);
+    color:var(--ink); min-height:100vh;
+    display:flex;align-items:flex-start;justify-content:center;padding:18px 12px 40px;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .wrap{width:100%;max-width:880px;}
+  header.top{display:flex;align-items:center;justify-content:space-between;
+    border-bottom:1px solid var(--line);padding-bottom:10px;margin-bottom:14px;}
+  .logo{font-size:22px;font-weight:800;letter-spacing:4px;
+    background:linear-gradient(90deg,var(--ember),var(--blood-soft));
+    -webkit-background-clip:text;background-clip:text;color:transparent;}
+  .logo small{display:block;font-size:10px;color:var(--ink-dim);letter-spacing:2px;font-weight:400;margin-top:2px;}
+  .stats{display:flex;gap:14px;font-size:12px;}
+  .stats b{color:var(--ember-soft);font-size:16px;display:block;text-align:right;}
+
+  .client{background:linear-gradient(180deg,var(--panel2),var(--panel));
+    border:1px solid var(--line);border-radius:16px;padding:16px;display:flex;gap:16px;align-items:center;position:relative;overflow:hidden;}
+  .client::after{content:"";position:absolute;inset:0;background:radial-gradient(400px 200px at 20% 0%, rgba(255,122,24,.10), transparent 60%);pointer-events:none;}
+  .facebox{width:96px;height:96px;flex:0 0 96px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:52px;
+    background:radial-gradient(circle at 50% 35%, #3a1d22, #160b0e);border:2px solid var(--line);transition:transform .25s, border-color .3s, box-shadow .3s;}
+  .facebox.shake{animation:shake .4s;}
+  @keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-6px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(4px)}}
+  .cinfo{flex:1;}
+  .cname{font-size:18px;font-weight:700;}
+  .ctag{display:inline-block;font-size:10px;color:var(--bg);background:var(--ember-soft);border-radius:6px;padding:1px 6px;margin-left:6px;vertical-align:middle;}
+  .cwish{color:var(--ink-dim);font-size:13px;margin-top:6px;line-height:1.5;}
+  .cdialog{margin-top:8px;font-size:13px;font-weight:600;min-height:18px;}
+
+  .sat{margin-top:12px;}
+  .satbar{position:relative;height:20px;border-radius:10px;background:#160b0e;border:1px solid var(--line);overflow:hidden;}
+  .satfill{position:absolute;left:0;top:0;bottom:0;width:100%;background:linear-gradient(90deg,var(--blood),var(--ember));transition:width .35s, background .35s;}
+  .satline{position:absolute;top:-4px;bottom:-4px;width:2px;background:#fff;opacity:.85;}
+  .satline::after{content:"签字线";position:absolute;top:-15px;left:-14px;font-size:9px;color:#fff;white-space:nowrap;opacity:.8;}
+  .sattxt{display:flex;justify-content:space-between;font-size:11px;color:var(--ink-dim);margin-top:6px;}
+
+  .alert{margin-top:10px;color:var(--bad);font-size:12px;background:rgba(224,80,111,.12);border:1px solid rgba(224,80,111,.35);border-radius:8px;padding:8px 10px;display:none;}
+  .alert.show{display:block;}
+
+  .slots{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;min-height:52px;background:var(--panel);border:1px dashed var(--line);border-radius:12px;padding:10px;}
+  .slot-empty{color:var(--ink-dim);font-size:12px;align-self:center;padding:6px 4px;}
+  .chip{display:flex;align-items:center;gap:6px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:6px 10px;font-size:12px;animation:pop .2s ease;}
+  @keyframes pop{from{transform:scale(.8);opacity:0}to{transform:scale(1);opacity:1}}
+  .chip.trap{border-color:var(--blood-soft);}
+  .chip.sweet{border-color:var(--good);}
+  .chip .x{cursor:pointer;color:var(--bad);font-weight:700;}
+  .chip .y{color:var(--ember-soft);} .chip .g{color:var(--good);}
+
+  .sec-label{margin:18px 0 8px;font-size:13px;color:var(--ink-dim);letter-spacing:2px;display:flex;justify-content:space-between;align-items:center;}
+  .sec-label .hint{font-size:10px;color:var(--ink-dim);}
+  .deck{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;}
+  .card{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line);border-radius:12px;padding:11px;cursor:pointer;transition:transform .15s, border-color .2s, box-shadow .2s;user-select:none;position:relative;}
+  .card:hover{transform:translateY(-3px);border-color:var(--ember);box-shadow:0 6px 18px rgba(255,122,24,.18);}
+  .card.trap{border-left:3px solid var(--blood-soft);}
+  .card.sweet{border-left:3px solid var(--good);}
+  .card.locked{opacity:.4;cursor:not-allowed;filter:grayscale(.6);}
+  .card.locked:hover{transform:none;border-color:var(--line);box-shadow:none;}
+  .card.used{opacity:.4;cursor:default;}
+  .card.used:hover{transform:none;box-shadow:none;}
+  .card .nm{font-size:14px;font-weight:700;margin-bottom:4px;}
+  .card .ds{font-size:11px;color:var(--ink-dim);line-height:1.4;min-height:32px;}
+  .card .fx{display:flex;justify-content:space-between;margin-top:8px;font-size:11px;font-weight:700;}
+  .card .fx .s{color:var(--bad);} .card .fx .y{color:var(--ember-soft);} .card .fx .g{color:var(--good);}
+  .card .lock-tag{position:absolute;top:8px;right:8px;font-size:10px;color:var(--ink-dim);}
+  .card .reward{position:absolute;top:8px;right:8px;font-size:10px;color:var(--ember-soft);}
+
+  .actions{display:flex;gap:12px;margin-top:18px;}
+  .btn{flex:1;border:none;border-radius:12px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;transition:transform .12s, opacity .2s, filter .2s;letter-spacing:2px;}
+  .btn:active{transform:scale(.97);}
+  .btn-sign{background:linear-gradient(90deg,var(--ember),var(--blood));color:#fff;}
+  .btn-sign:disabled{filter:grayscale(.8);opacity:.5;cursor:not-allowed;}
+  .btn-skip{background:var(--panel2);color:var(--ink-dim);border:1px solid var(--line);flex:0 0 120px;}
+
+  .toast{position:fixed;left:50%;top:22%;transform:translateX(-50%);background:rgba(20,10,14,.95);border:1px solid var(--ember);border-radius:12px;padding:14px 22px;font-size:14px;font-weight:700;opacity:0;pointer-events:none;transition:opacity .3s, transform .3s;z-index:50;}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(-6px);}
+
+  .overlay{position:fixed;inset:0;background:rgba(8,4,6,.95);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px;}
+  .overlay.hide{display:none;}
+  .panel{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line);border-radius:18px;padding:26px;max-width:540px;width:100%;}
+  .panel h1{font-size:28px;letter-spacing:6px;background:linear-gradient(90deg,var(--ember),var(--blood-soft));-webkit-background-clip:text;background-clip:text;color:transparent;text-align:center;}
+  .panel .sub{color:var(--ink-dim);font-size:13px;margin-bottom:14px;text-align:center;letter-spacing:1px;}
+  .rule{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;font-size:12px;color:var(--ink-dim);line-height:1.8;margin:14px 0;}
+  .rule b{color:var(--ember-soft);}
+  .start-btn{margin-top:16px;width:100%;background:linear-gradient(90deg,var(--ember),var(--blood));color:#fff;border:none;border-radius:12px;padding:14px;font-size:16px;font-weight:700;letter-spacing:3px;cursor:pointer;}
+  .reveal-list{margin:14px 0;max-height:46vh;overflow:auto;}
+  .reveal-item{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--blood-soft);border-radius:10px;padding:10px 12px;margin-bottom:8px;animation:pop .25s ease;}
+  .reveal-item .rn{font-size:14px;font-weight:700;color:var(--ember-soft);}
+  .reveal-item .rc{font-size:12px;color:var(--ink);line-height:1.6;margin-top:4px;}
+  .gain{text-align:center;font-size:15px;margin:10px 0;}
+  .gain b{color:var(--ember-soft);font-size:22px;}
+  .eval{display:flex;justify-content:space-around;margin:14px 0;font-size:13px;color:var(--ink-dim);}
+  .eval b{display:block;font-size:22px;color:var(--ember-soft);margin-top:4px;}
+  .rank{font-size:20px;font-weight:800;color:var(--ember-soft);text-align:center;margin:10px 0;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="logo">条 款<small>HELL CONTRACT MANAGER</small></div>
+    <div class="stats">
+      <div>已签<b id="st-signed">0</b></div>
+      <div>累计收益<b id="st-yield">0</b></div>
+      <div>客户<b id="st-idx">1/6</b></div>
+    </div>
+  </header>
+
+  <div class="client">
+    <div class="facebox" id="face">🙂</div>
+    <div class="cinfo">
+      <div class="cname" id="cname">—</div>
+      <div class="cwish" id="cwish">—</div>
+      <div class="cdialog" id="cdialog">—</div>
+      <div class="sat">
+        <div class="satbar"><div class="satfill" id="satfill"></div><div class="satline" id="satline"></div></div>
+        <div class="sattxt"><span id="sattxt-val">满意度 100</span><span id="sattxt-yield">条款收益 +0</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="alert" id="alert"></div>
+
+  <div class="slots" id="slots"></div>
+
+  <div class="sec-label"><span>🩸 陷 阱 条 款</span><span class="hint">抬高收益，也抬高客户警觉（暗线）</span></div>
+  <div class="deck" id="deck-trap"></div>
+
+  <div class="sec-label"><span>🍬 甜 头 条 款</span><span class="hint">抬满意度、压警觉，但吃掉收益与槽位</span></div>
+  <div class="deck" id="deck-sweet"></div>
+
+  <div class="actions">
+    <button class="btn btn-skip" id="btn-skip">放 走</button>
+    <button class="btn btn-sign" id="btn-sign" disabled>签 约</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<div class="overlay" id="start-overlay">
+  <div class="panel">
+    <h1>条 款</h1>
+    <div class="sub">— 黑色幽默 · 读脸下套 —</div>
+    <p style="font-size:13px;line-height:1.7;color:var(--ink);text-align:left;margin:8px 0;">你是地狱的合约经理。客户带着愿望而来，你要在有限槽位里塞满陷阱，又要让对方<b>满意度不低于签字线</b>才肯签。</p>
+    <div class="rule">
+      ◈ <b>明线</b>：满意度必须 ≥ 签字线（看得见的血条）。<br>
+      ◈ <b>暗线</b>：陷阱会抬升客户<b>警觉度</b>，但上限是隐藏的——你只能靠他的<b>表情和台词</b>去读，赌他什么时候翻脸。<br>
+      ◈ <b>甜头卡</b>：抬高满意度、压下警觉，但占用槽位、少赚收益。下套与安抚之间的筹码。<br>
+      ◈ <b>性格</b>：天真/多疑/贪婪/绝望/傲慢/痴情，每种对陷阱的警觉反应不同，读不懂就翻车。<br>
+      ◈ 签约后揭穿<b>真实条款</b>——这才是黑色幽默的爽点。
+    </div>
+    <button class="start-btn" id="btn-start">开 始 上 班</button>
+  </div>
+</div>
+
+<div class="overlay hide" id="reveal-overlay">
+  <div class="panel">
+    <h1 style="font-size:24px">合 约 生 效</h1>
+    <div class="sub" id="reveal-sub">客户满意地签了字，他以为自己赢了。</div>
+    <div class="reveal-list" id="reveal-list"></div>
+    <div class="gain" id="reveal-gain"></div>
+    <button class="start-btn" id="btn-next">下 一 位</button>
+  </div>
+</div>
+
+<div class="overlay hide" id="end-overlay">
+  <div class="panel">
+    <h1>下 班</h1>
+    <div class="rank" id="end-rank">—</div>
+    <p style="text-align:center;font-size:13px;color:var(--ink-dim)" id="end-flavor">—</p>
+    <div class="eval">
+      <div>签约数<b id="end-signed">0</b></div>
+      <div>总收益<b id="end-yield">0</b></div>
+      <div>精准/伪装<b id="end-precision">0</b></div>
+    </div>
+    <button class="start-btn" id="btn-restart">再 来 一 轮</button>
+  </div>
+</div>
+
+<script>
+/* ---------------- 性格 ---------------- */
+const PERSONALITIES = {
+  naive:      {name:'天真', susMult:0.6, lineMod:+4,  desc:'不太懂套路，警觉涨得慢，但要多哄。'},
+  suspicious: {name:'多疑', susMult:1.5, lineMod:-4,  desc:'本能嗅出陷阱，警觉涨得快。'},
+  greedy:     {name:'贪婪', susMult:1.0, lineMod:0,   lovesReward:true, desc:'对"高回报"条款毫无抵抗力。'},
+  desperate:  {name:'绝望', susMult:1.0, lineMod:-14, capMod:-25, desc:'签字线极低，但警觉上限也低，易被逼急。'},
+  arrogant:   {name:'傲慢', susMult:0.8, lineMod:+2,  desc:'觉得自己比你聪明，略好骗。'},
+  obsessed:   {name:'痴情', susMult:0.5, lineMod:0,   desc:'眼里只有愿望，几乎注意不到陷阱。'},
+};
+
+/* ---------------- 陷阱条款 ---------------- */
+const TRAPS = [
+  {id:'auto',   nm:'自动续约',     ds:'合约到期自动顺延，无需您操心。',               catch:'——您签的每一年，{theme}都被多拴一年，且由您付费。', sus:22, sat:-8,  yld:16, unlock:0},
+  {id:'right',  nm:'解释权归我方', ds:'条款如有歧义，以我方解释为准。',               catch:'——"歧义"由我们来定，{theme}的解释权也是我们的。', sus:18, sat:-6,  yld:13, unlock:0},
+  {id:'fee',    nm:'地狱服务费',   ds:'仅收取象征性手续费。',                         catch:'——手续费按{theme}计价，且逐年通胀。',           sus:16, sat:-5,  yld:11, unlock:0},
+  {id:'sign',   nm:'姓名代签',     ds:'可由您信任之人代您签署。',                     catch:'——代签的是您最信任的人，{theme}因此更痛。',     sus:17, sat:-5,  yld:9,  unlock:0},
+  {id:'soul',   nm:'灵魂碎片抵押', ds:'以一段记忆作质押，可随时赎回。',               catch:'——赎回价是您剩下的全部记忆，{theme}那段已没了。', sus:26, sat:-12, yld:26, unlock:60},
+  {id:'pain',   nm:'痛苦加倍',     ds:'履约体验升级，感受更强烈。',                   catch:'——{theme}重逢的每一秒，痛感翻倍计入您。',       sus:28, sat:-10, yld:30, unlock:120},
+  {id:'reinc',  nm:'轮回绑定',     ds:'福泽荫及子孙，代代相传。',                     catch:'——{theme}的债，您的曾孙还在还。',             sus:24, sat:-10, yld:24, unlock:180},
+  {id:'mem',    nm:'记忆篡改',     ds:'签字后为您封存不快记忆。',                     catch:'——您会忘了签过字，{theme}也忘了您。',         sus:22, sat:-9,  yld:21, unlock:240},
+  {id:'eternal',nm:'永世契约',     ds:'一次签约，永久有效，安心无忧。',               catch:'——世界毁灭后，{theme}仍归您"管理"。',        sus:32, sat:-14, yld:48, unlock:320},
+  {id:'vip',    nm:'至尊回报计划', ds:'签约即享高额回报，稳赚不赔。', reward:true,    catch:'——"回报"是{theme}的所有权，归我们。',         sus:20, sat:-7,  yld:22, unlock:60},
+];
+
+/* ---------------- 甜头条款 ---------------- */
+const SWEETS = [
+  {id:'consult', nm:'免费咨询', ds:'附赠终身免费咨询服务。',                 sat:+10, sus:-16, yld:0,  unlock:0},
+  {id:'bless',   nm:'祝福加持', ds:'为您与挚爱送上诚挚祝福。',               sat:+9,  sus:-14, yld:-1, unlock:0},
+  {id:'channel', nm:'优先通道', ds:'您将享有 VIP 优先处理通道。',             sat:+8,  sus:-12, yld:-2, unlock:0},
+  {id:'reunion', nm:'温情回访', ds:'我们每年回访您的挚爱。',                 sat:+14, sus:-22, yld:-6, unlock:0},
+];
+
+/* ---------------- 客户 ---------------- */
+const CLIENTS = [
+  {name:'落魄诗人', theme:'亡妻', personality:'naive',      line:58, slots:4, wish:'"只要再看亡妻一眼，什么条件都行。"'},
+  {name:'贪婪商人', theme:'财富', personality:'greedy',     line:50, slots:5, wish:'"钱不是问题，问题是钱不够。"'},
+  {name:'孤僻学者', theme:'知识', personality:'suspicious', line:60, slots:4, wish:'"知识即自由，我愿以一切换取。"'},
+  {name:'绝望赌徒', theme:'赌局', personality:'desperate',  line:42, slots:5, wish:'"这把赢了，我这辈子都值了。"'},
+  {name:'垂死暴君', theme:'江山', personality:'arrogant',   line:64, slots:6, wish:'"朕的江山，不能没有朕。"'},
+  {name:'痴情ghost',theme:'爱人', personality:'obsessed',   line:54, slots:5, wish:'"让我再抱爱人一次，哪怕只是影子。"'},
+];
+
+/* ---------------- 状态 ---------------- */
+let state = null;
+function newGame(){
+  state = {idx:0, signed:0, totalYield:0, precision:0, filled:[], phase:'play'};
+  document.getElementById('start-overlay').classList.add('hide');
+  document.getElementById('reveal-overlay').classList.add('hide');
+  document.getElementById('end-overlay').classList.add('hide');
+  renderPlay();
+}
+function curClient(){ return CLIENTS[state.idx]; }
+
+/* ---------------- 计算 ---------------- */
+function compute(){
+  const c = curClient();
+  const p = PERSONALITIES[c.personality];
+  let sat=100, sus=0, yld=0;
+  state.filled.forEach(f=>{
+    const it = f.type==='trap' ? TRAPS.find(t=>t.id===f.id) : SWEETS.find(s=>s.id===f.id);
+    sat += it.sat; yld += it.yld;
+    if(f.type==='trap'){
+      let s = it.sus * p.susMult;
+      if(it.reward && p.lovesReward) s *= 0.6;
+      sus += s;
+    } else { sus += it.sus; }
+  });
+  const line = Math.max(30, c.line + (p.lineMod||0));
+  const cap  = 100 + (p.capMod||0);
+  return {sat, sus, yld, line, cap, ratio: sus/cap};
+}
+
+/* ---------------- 台词（读脸） ---------------- */
+const DIALOG = {
+  relax:  ['这条件听起来挺公道。','哈哈，你这人说话中听。','行，我信你一次。','嗯……感觉还不错？'],
+  wary:   ['等等，这条我有点拿不准。','你确定没别的猫腻？','我怎么觉得哪里不对。','慢着，让我再仔细看看。'],
+  uneasy: ['你不会在耍我吧？','这条款读着发毛。','我开始后悔来了。','我怎么浑身不自在。'],
+  brink:  ['我怎么觉得你在耍我……','再多加一条我就走。','你脸上的笑让我发冷。','我……信不过你了。'],
+  flip:   ['你当我傻？！','滚，这合约我不签了！','地狱也不该这么黑！','再见，祝你孤独终老。'],
+};
+const FACE = {relax:'😊', wary:'🙂', uneasy:'😐', brink:'😟', flip:'😡'};
+const COLOR= {relax:'#46c98b', wary:'#ffb066', uneasy:'#ffb066', brink:'#e0506f', flip:'#e0506f'};
+
+function readClient(ratio){
+  if(ratio>=1)   return 'flip';
+  if(ratio>=0.75)return 'brink';
+  if(ratio>=0.5) return 'uneasy';
+  if(ratio>=0.25)return 'wary';
+  return 'relax';
+}
+function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+
+/* ---------------- 渲染：对局 ---------------- */
+function renderPlay(){
+  const c = curClient();
+  const p = PERSONALITIES[c.personality];
+  document.getElementById('st-signed').textContent = state.signed;
+  document.getElementById('st-yield').textContent = state.totalYield;
+  document.getElementById('st-idx').textContent = (state.idx+1)+'/'+CLIENTS.length;
+
+  document.getElementById('cname').innerHTML = c.name + '<span class="ctag">'+p.name+'</span>';
+  document.getElementById('cwish').textContent = c.wish;
+
+  const {sat,yld,line,cap,ratio} = compute();
+  const tier = readClient(ratio);
+  const faceEl = document.getElementById('face');
+  faceEl.textContent = FACE[tier];
+  faceEl.style.borderColor = COLOR[tier];
+  faceEl.style.boxShadow = '0 0 22px '+COLOR[tier]+'55';
+  document.getElementById('cdialog').textContent = pick(DIALOG[tier]);
+  document.getElementById('cdialog').style.color = COLOR[tier];
+
+  const fill = document.getElementById('satfill');
+  fill.style.width = Math.max(0,Math.min(100,sat))+'%';
+  fill.style.background = sat<line ? 'linear-gradient(90deg,#7a1530,#c0264a)' : 'linear-gradient(90deg,var(--blood),var(--ember))';
+  document.getElementById('satline').style.left = line+'%';
+  document.getElementById('sattxt-val').textContent = '满意度 '+sat+' / 签字线 '+line;
+  document.getElementById('sattxt-yield').textContent = '条款收益 +'+yld;
+
+  const alert = document.getElementById('alert');
+  if(tier==='flip'){ alert.textContent='⚠ 客户起疑！删掉陷阱或加甜头安抚，否则只能放走。'; alert.classList.add('show'); }
+  else if(tier==='brink'){ alert.textContent='⚠ 客户已接近翻脸，再加陷阱极可能谈崩。'; alert.classList.add('show'); }
+  else alert.classList.remove('show');
+
+  // 槽位
+  const slots = document.getElementById('slots');
+  slots.innerHTML='';
+  if(state.filled.length===0){
+    slots.innerHTML = '<span class="slot-empty">空槽 '+c.slots+' 个 —— 点下方条款填入</span>';
+  }else{
+    state.filled.forEach((f,i)=>{
+      const it = f.type==='trap' ? TRAPS.find(t=>t.id===f.id) : SWEETS.find(s=>s.id===f.id);
+      const chip = document.createElement('div');
+      chip.className = 'chip '+(f.type==='trap'?'trap':'sweet');
+      const val = f.type==='trap' ? '<span class="y">+'+it.yld+'</span>' : '<span class="g">'+(it.yld<=0?it.yld:'+'+it.yld)+'</span>';
+      chip.innerHTML = '<span>'+it.nm+'</span>'+val+'<span class="x" data-i="'+i+'">✕</span>';
+      slots.appendChild(chip);
+    });
+    if(state.filled.length < c.slots) slots.appendChild(Object.assign(document.createElement('span'),{className:'slot-empty',textContent:'（剩 '+(c.slots-state.filled.length)+' 槽）'}));
+  }
+  slots.querySelectorAll('.x').forEach(x=>{ x.onclick=()=>{ state.filled.splice(+x.dataset.i,1); renderPlay(); }; });
+
+  // 陷阱库
+  const dt = document.getElementById('deck-trap'); dt.innerHTML='';
+  TRAPS.forEach(cl=>{
+    const unlocked = state.totalYield >= cl.unlock;
+    const inUse = state.filled.some(f=>f.id===cl.id);
+    const full = state.filled.length >= c.slots;
+    const card = document.createElement('div');
+    card.className='card trap'+(unlocked?'':' locked')+(inUse?' used':'');
+    card.innerHTML =
+      (unlocked?'':('<div class="lock-tag">🔒'+cl.unlock+'收益解锁</div>'))+
+      (cl.reward?'<div class="reward">★高回报</div>':'')+
+      '<div class="nm">'+cl.nm+'</div><div class="ds">'+cl.ds+'</div>'+
+      '<div class="fx"><span class="s">满意度 '+cl.sat+'</span><span class="y">收益 +'+cl.yld+'</span></div>';
+    if(unlocked && !inUse && !full) card.onclick=()=>{ state.filled.push({id:cl.id,type:'trap'}); renderPlay(); };
+    dt.appendChild(card);
+  });
+
+  // 甜头库
+  const ds = document.getElementById('deck-sweet'); ds.innerHTML='';
+  SWEETS.forEach(cl=>{
+    const inUse = state.filled.some(f=>f.id===cl.id);
+    const full = state.filled.length >= c.slots;
+    const card = document.createElement('div');
+    card.className='card sweet'+(inUse?' used':'');
+    card.innerHTML = '<div class="nm">'+cl.nm+'</div><div class="ds">'+cl.ds+'</div>'+
+      '<div class="fx"><span class="g">满意度 +'+cl.sat+'</span><span class="g">警觉 '+cl.sus+'</span></div>';
+    if(!inUse && !full) card.onclick=()=>{ state.filled.push({id:cl.id,type:'sweet'}); renderPlay(); };
+    ds.appendChild(card);
+  });
+
+  // 签约按钮
+  const btn = document.getElementById('btn-sign');
+  const canSign = sat>=line && ratio<1 && state.filled.length>0;
+  btn.disabled = !canSign;
+  btn.textContent = ratio>=1 ? '客户已起疑，无法签约' : (sat<line ? '满意度不足，无法签约' : '签 约');
+}
+
+function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),1600); }
+
+/* ---------------- 签约 / 揭穿 ---------------- */
+document.getElementById('btn-sign').onclick = ()=>{
+  const {sat,yld,line,ratio} = compute();
+  if(sat<line || ratio>=1 || state.filled.length===0) return;
+  let mult=1, precise=false, disguise=false;
+  if(sat<=line+5){ mult*=1.15; precise=true; }
+  if(ratio>=0.75){ mult*=1.3; disguise=true; }
+  const gain = Math.round(yld*mult);
+  state.signed++; state.totalYield+=gain; if(precise) state.precision++;
+  state.lastGain={gain,precise,disguise};
+  state.phase='reveal';
+  renderReveal();
+};
+
+document.getElementById('btn-skip').onclick = ()=>{
+  toast('客户被你吓得跑了……本单作废');
+  nextClient();
+};
+
+function catchOf(trap, client){ return trap.catch.replace(/\{theme\}/g, client.theme); }
+
+function renderReveal(){
+  const c = curClient();
+  const list = document.getElementById('reveal-list');
+  list.innerHTML='';
+  const traps = state.filled.filter(f=>f.type==='trap');
+  if(traps.length===0){
+    list.innerHTML='<div class="reveal-item"><div class="rc">你一份陷阱都没下。客户欢天喜地走了——地狱很失望。</div></div>';
+  }else{
+    traps.forEach(f=>{
+      const t = TRAPS.find(x=>x.id===f.id);
+      const item = document.createElement('div');
+      item.className='reveal-item';
+      item.innerHTML='<div class="rn">'+t.nm+'</div><div class="rc">'+catchOf(t,c)+'</div>';
+      list.appendChild(item);
+    });
+  }
+  const g = state.lastGain;
+  let sub = '客户满意地签了字，他以为自己赢了。';
+  if(g.disguise) sub='他在翻脸边缘签了字——你赌赢了这场读心。';
+  if(g.precise)  sub='满意度卡在签字线上——他差点就不签了。';
+  if(g.precise&&g.disguise) sub='极限施压 × 千钧一发：他在崩溃边缘签了字。';
+  document.getElementById('reveal-sub').textContent = sub;
+  let bonus='';
+  if(g.precise) bonus+=' 极限施压×1.15';
+  if(g.disguise) bonus+=' 千钧一发×1.3';
+  document.getElementById('reveal-gain').innerHTML = '本单收益 <b>+'+g.gain+'</b>'+(bonus?'<span style="font-size:11px;color:var(--ink-dim)">'+bonus+'</span>':'');
+  document.getElementById('reveal-overlay').classList.remove('hide');
+}
+
+document.getElementById('btn-next').onclick = ()=>{
+  document.getElementById('reveal-overlay').classList.add('hide');
+  nextClient();
+};
+
+function nextClient(){
+  state.idx++; state.filled=[];
+  if(state.idx>=CLIENTS.length){ endGame(); return; }
+  renderPlay();
+}
+
+/* ---------------- 结算 ---------------- */
+function endGame(){
+  document.getElementById('end-signed').textContent = state.signed;
+  document.getElementById('end-yield').textContent = state.totalYield;
+  document.getElementById('end-precision').textContent = state.precision;
+  let rank, flavor;
+  if(state.totalYield>=400){ rank='👑 地狱首席谈判官'; flavor='撒旦本人都要向你递烟。你下的套，连魔鬼都觉得过分。'; }
+  else if(state.totalYield>=250){ rank='🔥 资深合约经理'; flavor='客户的灵魂在你手里被安排得明明白白。'; }
+  else if(state.totalYield>=120){ rank='📜 初级合约员'; flavor='勉强及格，但客户走时还在笑——你太温柔了。'; }
+  else { rank='🐣 实习小鬼'; flavor='你签下的每一单，客户都觉得自己赚了。地狱很失望。'; }
+  document.getElementById('end-rank').textContent = rank;
+  document.getElementById('end-flavor').textContent = flavor;
+  document.getElementById('end-overlay').classList.remove('hide');
+}
+
+document.getElementById('btn-start').onclick = newGame;
+document.getElementById('btn-restart').onclick = newGame;
+</script>
+</body>
+</html>

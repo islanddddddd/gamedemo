@@ -8,11 +8,27 @@
     "thumb": null
   },
   {
+    "id": "拆楼",
+    "name": "拆楼",
+    "description": "体验类似于搭桥模拟器；注：该模式目前存在 bug，且线性切割功能缺少特效表现",
+    "review": "还行",
+    "path": "/%E6%8B%86%E6%A5%BC/index.html",
+    "thumb": null
+  },
+  {
     "id": "晨间萃取",
     "name": "晨间萃取",
     "description": "风格化 3D 渲染的咖啡萃取模拟 —— three.js 还原清晨手冲的一刻",
     "review": "",
     "path": "/%E6%99%A8%E9%97%B4%E8%90%83%E5%8F%96/index.html",
+    "thumb": null
+  },
+  {
+    "id": "条款",
+    "name": "条款",
+    "description": "",
+    "review": "",
+    "path": "/%E6%9D%A1%E6%AC%BE/index.html",
     "thumb": null
   },
   {
