@@ -1,0 +1,3309 @@
+<!DOCTYPE html>
+<!-- 深渊 · ABYSS — 单文件版：HTML + CSS + JS 全部内联，双击即可运行 -->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#07080a">
+<meta name="description" content="深渊 ABYSS — 一款关于向下挖掘的增量游戏">
+<title>深渊 · ABYSS</title>
+<style>
+/* ==========================================================================
+   深渊 · ABYSS — 样式表
+   深色主题，配色随深度由 JS 改写 --accent / --bg-deep 等 CSS 变量。
+   移动端优先：所有可点击元素触控区 ≥ 44px。
+   ========================================================================== */
+
+:root{
+  /* 主题变量（JS 会随矿层改写 --accent / --accent2） */
+  --accent:   #ffa63a;   /* 琥珀：地表 / 暖调 */
+  --accent2:  #38e0d0;   /* 青色：深渊 / 冷调 */
+  --bg:       #07080a;
+  --panel:    #0d0f13;
+  --panel2:   #14171d;
+  --panel3:   #1b2027;
+  --line:     #232a33;
+  --txt:      #e8edf3;
+  --dim:      #8b96a5;
+  --dim2:     #5d6672;
+  --ok:       #6ede8a;
+  --bad:      #ff6b6b;
+  --hud-h:    92px;
+  --panel-h:  46vh;
+  --safe-b:   env(safe-area-inset-bottom, 0px);
+}
+
+*{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+
+html,body{
+  margin:0; padding:0; height:100%; overflow:hidden;
+  background:var(--bg); color:var(--txt);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  font-size:14px; line-height:1.45;
+  overscroll-behavior:none;
+  -webkit-user-select:none; user-select:none;
+  touch-action:manipulation;
+}
+
+#app{ position:fixed; inset:0; }
+
+/* ---------- 3D 画布 ---------- */
+#gl{
+  position:absolute; top:0; left:0;
+  width:100%; height:calc(100% - var(--panel-h));
+  display:block; background:#05060a;
+  touch-action:none;
+}
+/* 颗粒噪点（纯 CSS，静态，不耗性能） */
+#grain{
+  position:absolute; top:0; left:0; width:100%;
+  height:calc(100% - var(--panel-h));
+  pointer-events:none; opacity:.16; mix-blend-mode:overlay;
+  background-image:
+    radial-gradient(rgba(255,255,255,.35) .5px, transparent .5px),
+    radial-gradient(rgba(255,255,255,.20) .5px, transparent .5px);
+  background-size:3px 3px, 7px 7px;
+  background-position:0 0, 2px 3px;
+}
+/* 深渊压暗层：深度越大越黑（JS 调整 opacity） */
+#dark{
+  position:absolute; top:0; left:0; width:100%;
+  height:calc(100% - var(--panel-h));
+  pointer-events:none; opacity:0; transition:opacity 1.2s linear;
+  background:radial-gradient(120% 80% at 50% 40%, rgba(0,0,0,0) 0%, rgba(0,0,0,.55) 60%, rgba(0,0,0,.92) 100%);
+}
+
+/* ---------- 顶部 HUD ---------- */
+#hud{
+  position:absolute; top:0; left:0; right:0;
+  padding:calc(env(safe-area-inset-top, 0px) + 8px) 10px 0;
+  background:linear-gradient(180deg, rgba(5,6,9,.92) 0%, rgba(5,6,9,.72) 60%, rgba(5,6,9,0) 100%);
+  pointer-events:none; z-index:6;
+}
+.hud-main{ display:flex; align-items:flex-end; gap:14px; }
+.stat{ display:flex; align-items:baseline; gap:5px; }
+.stat .k{ font-size:11px; color:var(--dim); letter-spacing:.06em; }
+.stat .v{ font-size:20px; font-weight:700; font-variant-numeric:tabular-nums; letter-spacing:-.01em; }
+.stat .u{ font-size:11px; color:var(--dim); }
+.stat-depth .v{
+  font-size:30px; line-height:1; color:var(--accent);
+  text-shadow:0 0 18px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.amber{ color:var(--accent); }
+.cyan{  color:var(--accent2); }
+
+.hud-sub{ display:flex; flex-wrap:wrap; gap:6px; margin-top:7px; }
+.chip{
+  font-size:11px; color:var(--dim);
+  background:rgba(20,23,29,.78); border:1px solid var(--line);
+  border-radius:999px; padding:3px 9px; display:flex; gap:4px; align-items:baseline;
+  font-variant-numeric:tabular-nums;
+}
+.chip span{ color:var(--txt); font-weight:600; }
+.chip .k{ color:var(--dim); font-weight:400; }
+.chip-layer{ color:var(--accent); border-color:color-mix(in srgb, var(--accent) 40%, var(--line)); }
+.chip-log{ color:var(--accent2); border-color:color-mix(in srgb, var(--accent2) 35%, var(--line)); }
+.chip-log.near{ animation:breathe 1.6s ease-in-out infinite; }
+
+#depthBar{
+  margin-top:8px; height:3px; border-radius:2px;
+  background:rgba(255,255,255,.07); overflow:hidden;
+}
+#depthBarFill{
+  display:block; height:100%; width:0%;
+  background:linear-gradient(90deg, var(--accent), var(--accent2));
+  transition:width .25s linear;
+}
+
+/* ---------- 挖掘按钮 ---------- */
+#digBtn{
+  position:absolute; z-index:7;
+  right:12px; bottom:calc(var(--panel-h) + 12px);
+  width:96px; height:96px; border-radius:50%;
+  border:2px solid color-mix(in srgb, var(--accent) 65%, transparent);
+  background:radial-gradient(circle at 40% 32%, rgba(255,255,255,.14), rgba(10,11,14,.94) 62%);
+  color:var(--txt); display:flex; flex-direction:column;
+  align-items:center; justify-content:center; gap:1px;
+  box-shadow:0 8px 26px rgba(0,0,0,.55), 0 0 22px color-mix(in srgb, var(--accent) 22%, transparent);
+  cursor:pointer; padding:0;
+}
+#digBtn .dig-core{ font-size:30px; line-height:1; filter:drop-shadow(0 0 8px color-mix(in srgb, var(--accent) 60%, transparent)); }
+#digBtn .dig-label{ font-size:12px; letter-spacing:.28em; color:var(--dim); }
+#digBtn .dig-sub{ font-size:11px; color:var(--accent); font-variant-numeric:tabular-nums; }
+#digBtn:active{ transform:scale(.93); }
+#digBtn.pulse{ animation:digPulse .18s ease-out; }
+@keyframes digPulse{ 0%{transform:scale(1)} 45%{transform:scale(.9)} 100%{transform:scale(1)} }
+
+/* ---------- 底部面板 ---------- */
+#panel{
+  position:absolute; left:0; right:0; bottom:0;
+  height:var(--panel-h); z-index:8;
+  display:flex; flex-direction:column;
+  background:linear-gradient(180deg, rgba(13,15,19,.96) 0%, #0b0d11 100%);
+  border-top:1px solid var(--line);
+  padding-bottom:var(--safe-b);
+  box-shadow:0 -10px 30px rgba(0,0,0,.5);
+}
+#tabs{ display:flex; flex:0 0 auto; border-bottom:1px solid var(--line); }
+.tab{
+  flex:1; min-height:46px; background:none; border:0; border-bottom:2px solid transparent;
+  color:var(--dim); font-size:14px; font-weight:600; cursor:pointer;
+}
+.tab.active{ color:var(--accent); border-bottom-color:var(--accent); }
+#tabBody{ flex:1 1 auto; overflow-y:auto; -webkit-overflow-scrolling:touch; }
+.tabpane{ display:none; padding:10px 10px 24px; }
+.tabpane.active{ display:block; }
+
+/* ---------- 卡片 ---------- */
+.card{
+  background:var(--panel2); border:1px solid var(--line);
+  border-radius:12px; padding:10px 12px; margin-bottom:10px;
+}
+.card-title{
+  font-size:13px; font-weight:700; letter-spacing:.04em;
+  display:flex; justify-content:space-between; align-items:center; gap:8px;
+}
+.card-title small{ font-weight:400; color:var(--dim); font-size:11px; }
+.card-note{ font-size:11.5px; color:var(--dim); margin-top:5px; line-height:1.5; }
+.row{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:8px; }
+.kv{ display:flex; gap:6px; align-items:baseline; font-size:12px; color:var(--dim); }
+.kv b{ color:var(--txt); font-size:14px; font-variant-numeric:tabular-nums; }
+.mono{ font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+
+/* ---------- 按钮 ---------- */
+.btn{
+  min-height:44px; padding:0 14px; border-radius:10px; cursor:pointer;
+  border:1px solid var(--line); background:var(--panel3); color:var(--txt);
+  font-size:13px; font-weight:600; display:inline-flex;
+  align-items:center; justify-content:center; gap:6px;
+}
+.btn:active{ transform:translateY(1px); }
+.btn.primary{ background:linear-gradient(180deg, color-mix(in srgb, var(--accent) 88%, #000), color-mix(in srgb, var(--accent) 62%, #000)); color:#14100a; border-color:transparent; }
+.btn.cyan{ background:linear-gradient(180deg, color-mix(in srgb, var(--accent2) 88%, #000), color-mix(in srgb, var(--accent2) 60%, #000)); color:#04140f; border-color:transparent; }
+.btn.ghost{ background:transparent; color:var(--dim); }
+.btn.danger{ background:transparent; color:var(--bad); border-color:color-mix(in srgb, var(--bad) 45%, var(--line)); }
+.btn.block{ width:100%; }
+.btn:disabled{ opacity:.42; cursor:not-allowed; }
+.btn.breathe{ animation:breathe 1.9s ease-in-out infinite; }
+@keyframes breathe{
+  0%,100%{ box-shadow:0 0 0 0 color-mix(in srgb, var(--accent) 42%, transparent); }
+  50%    { box-shadow:0 0 0 7px color-mix(in srgb, var(--accent) 0%, transparent); }
+}
+.switch{
+  min-height:44px; min-width:64px; padding:0 10px; border-radius:10px;
+  border:1px solid var(--line); background:var(--panel3); color:var(--dim);
+  font-size:12px; font-weight:700; cursor:pointer;
+}
+.switch.on{ color:#14100a; background:var(--accent); border-color:transparent; }
+
+/* ---------- 购买列表 ---------- */
+.list-head{
+  font-size:11px; color:var(--dim2); letter-spacing:.18em;
+  margin:12px 0 6px 2px;
+}
+.item{
+  display:grid; grid-template-columns:42px 1fr; gap:4px 10px;
+  padding:10px; margin-bottom:8px;
+  background:var(--panel2); border:1px solid var(--line); border-radius:12px;
+}
+.item.locked{ opacity:.5; }
+.item-icon{
+  width:42px; height:42px; border-radius:10px; display:flex; align-items:center; justify-content:center;
+  font-size:22px; background:var(--panel3); border:1px solid var(--line);
+}
+.item-main{ min-width:0; }
+.item-title{
+  font-size:14px; font-weight:700; display:flex; gap:6px; align-items:baseline; flex-wrap:wrap;
+}
+.item-title .lvl{ font-size:11px; color:var(--accent); font-weight:600; }
+.item-desc{ font-size:11px; color:var(--dim); margin-top:2px; line-height:1.4; }
+.item-meta{ font-size:11.5px; color:var(--accent2); margin-top:3px; font-variant-numeric:tabular-nums; }
+.item-meta .muted{ color:var(--dim2); }
+.item-buy{ grid-column:1/-1; display:flex; gap:6px; margin-top:6px; }
+.buy{
+  flex:1 1 0; min-height:44px; padding:2px 4px; border-radius:10px; cursor:pointer;
+  border:1px solid var(--line); background:var(--panel3); color:var(--txt);
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px;
+  font-variant-numeric:tabular-nums; overflow:hidden;
+}
+.buy b{ font-size:12px; font-weight:700; }
+.buy span{ font-size:10.5px; color:var(--dim); }
+.buy.can{ border-color:color-mix(in srgb, var(--accent) 55%, transparent); color:var(--accent); }
+.buy.can span{ color:color-mix(in srgb, var(--accent) 70%, #fff); }
+.buy.can{ animation:breathe 2.4s ease-in-out infinite; }
+.buy:disabled{ opacity:.4; cursor:not-allowed; animation:none; }
+.buy.max b{ color:var(--accent2); }
+
+/* ---------- 档案 ---------- */
+.log-item{
+  display:flex; gap:10px; align-items:center;
+  padding:11px 10px; margin-bottom:7px; min-height:56px;
+  background:var(--panel2); border:1px solid var(--line); border-radius:10px; cursor:pointer;
+}
+.log-item .no{ font-size:11px; color:var(--dim2); min-width:44px; font-family:ui-monospace,monospace; }
+.log-item .tt{ font-size:13px; font-weight:600; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.log-item .dp{ font-size:11px; color:var(--dim); font-variant-numeric:tabular-nums; }
+.log-item.locked{ opacity:.55; }
+.log-item.locked .tt{ color:var(--dim2); letter-spacing:.02em; font-family:ui-monospace,monospace; }
+.log-item.fresh{ border-color:var(--accent2); box-shadow:0 0 0 1px color-mix(in srgb, var(--accent2) 30%, transparent) inset; }
+.ach-grid{ display:grid; grid-template-columns:repeat(2,1fr); gap:7px; }
+.ach{
+  padding:9px 10px; border-radius:10px; border:1px solid var(--line);
+  background:var(--panel2); min-height:56px;
+}
+.ach.got{ border-color:color-mix(in srgb, var(--accent) 45%, transparent); background:color-mix(in srgb, var(--accent) 8%, var(--panel2)); }
+.ach .an{ font-size:12.5px; font-weight:700; }
+.ach .ad{ font-size:10.5px; color:var(--dim); margin-top:2px; }
+.ach.lock .an{ color:var(--dim2); }
+
+/* ---------- 设置 ---------- */
+.set-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 0; border-bottom:1px solid var(--line); }
+.set-row .lbl{ font-size:13px; }
+.set-row .lbl small{ display:block; font-size:10.5px; color:var(--dim2); }
+input[type=range]{ width:150px; height:44px; accent-color:var(--accent); }
+.seg{ display:flex; gap:5px; }
+.seg .btn{ min-height:44px; padding:0 11px; font-size:12px; }
+.seg .btn.on{ background:var(--accent); color:#14100a; border-color:transparent; }
+textarea{
+  width:100%; min-height:120px; border-radius:10px; border:1px solid var(--line);
+  background:#080a0d; color:var(--txt); padding:10px; font-size:11px;
+  font-family:ui-monospace,monospace; resize:vertical;
+}
+
+/* ---------- 购买特效：全屏闪光（DOM 层，零 GPU 成本） ---------- */
+.fx-flash{
+  position:absolute; left:0; right:0; top:0;
+  height:calc(100% - var(--panel-h));
+  pointer-events:none; opacity:0; z-index:5; display:none;
+  mix-blend-mode:screen; will-change:opacity;
+}
+
+/* ---------- 浮动数字 ---------- */
+#floaters{ position:absolute; inset:0; pointer-events:none; z-index:9; overflow:hidden; }
+.floater{
+  position:absolute; transform:translate(-50%,-50%);
+  font-size:16px; font-weight:800; color:var(--accent);
+  text-shadow:0 2px 8px rgba(0,0,0,.85);
+  animation:floatUp 1s cubic-bezier(.2,.7,.3,1) forwards;
+  white-space:nowrap; font-variant-numeric:tabular-nums;
+}
+.floater.ore{ color:var(--accent2); font-size:14px; }
+.floater.coin{ color:#ffe08a; font-size:14px; }
+.floater.crit{ color:#fff; font-size:22px; }
+@keyframes floatUp{
+  0%{ opacity:0; transform:translate(-50%,-50%) scale(.7); }
+  18%{ opacity:1; transform:translate(-50%,-70%) scale(1.06); }
+  100%{ opacity:0; transform:translate(-50%,-190%) scale(1); }
+}
+
+/* ---------- 弹窗 ---------- */
+#modalLayer{
+  position:absolute; inset:0; z-index:20;
+  background:rgba(3,4,6,.78); backdrop-filter:blur(3px);
+  display:flex; align-items:center; justify-content:center; padding:16px;
+}
+#modalLayer.hidden{ display:none; }
+.modal{
+  width:100%; max-width:420px; max-height:82%; display:flex; flex-direction:column;
+  background:linear-gradient(180deg,#12151b,#0b0d11);
+  border:1px solid var(--line); border-radius:14px; overflow:hidden;
+  box-shadow:0 24px 60px rgba(0,0,0,.7);
+}
+.modal.warn{ border-color:color-mix(in srgb, var(--accent2) 55%, transparent); box-shadow:0 0 40px color-mix(in srgb, var(--accent2) 20%, transparent), 0 24px 60px rgba(0,0,0,.7); }
+.modal-hd{ padding:12px 14px 8px; border-bottom:1px solid var(--line); }
+.modal-hd .mt{ font-size:15px; font-weight:800; letter-spacing:.03em; }
+.modal-hd .ms{ font-size:11px; color:var(--accent2); margin-top:3px; font-family:ui-monospace,monospace; }
+.modal-bd{ padding:12px 14px; overflow-y:auto; font-size:13px; line-height:1.75; }
+.modal-ft{ padding:10px 14px calc(12px + var(--safe-b)); display:flex; gap:8px; border-top:1px solid var(--line); }
+.modal-ft .btn{ flex:1; }
+.typing{ font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:12.5px; white-space:pre-wrap; word-break:break-word; }
+.caret{ display:inline-block; width:8px; background:var(--accent2); color:transparent; animation:blink .8s steps(1) infinite; }
+@keyframes blink{ 50%{ opacity:0; } }
+.logmeta{ font-size:11px; color:var(--dim); margin-bottom:8px; font-family:ui-monospace,monospace; }
+.reward{ margin-top:12px; padding:9px 10px; border-radius:9px; background:color-mix(in srgb, var(--accent) 12%, transparent); border:1px dashed color-mix(in srgb, var(--accent) 45%, transparent); font-size:12px; color:var(--accent); }
+.scramble{ color:var(--dim2); letter-spacing:.08em; word-break:break-all; font-family:ui-monospace,monospace; font-size:12px; }
+
+/* ---------- Toast ---------- */
+#toasts{ position:absolute; left:0; right:0; top:calc(var(--hud-h) + 6px); z-index:15; pointer-events:none; display:flex; flex-direction:column; align-items:center; gap:6px; }
+.toast{
+  background:rgba(14,17,22,.94); border:1px solid var(--line);
+  border-left:3px solid var(--accent);
+  padding:8px 12px; border-radius:9px; font-size:12.5px; max-width:88%;
+  animation:toastIn .25s ease-out, toastOut .4s ease-in 2.6s forwards;
+}
+.toast.cyan{ border-left-color:var(--accent2); }
+@keyframes toastIn{ from{ opacity:0; transform:translateY(-8px) } to{ opacity:1; transform:none } }
+@keyframes toastOut{ to{ opacity:0; transform:translateY(-6px) } }
+
+/* ---------- 启动遮罩 ---------- */
+#boot{
+  position:absolute; inset:0; z-index:40; display:flex; align-items:center; justify-content:center;
+  background:radial-gradient(80% 60% at 50% 40%, #101319, #05060a 70%);
+}
+#boot.hidden{ display:none; }
+.boot-inner{ text-align:center; padding:20px; }
+.boot-title{ font-size:26px; font-weight:800; letter-spacing:.4em; color:var(--accent); text-shadow:0 0 30px rgba(255,166,58,.35); }
+.boot-msg{ margin-top:12px; font-size:12px; color:var(--dim); }
+.boot-tip{ margin-top:10px; font-size:11px; color:var(--dim2); max-width:300px; line-height:1.6; }
+.boot-error .boot-title{ color:var(--bad); }
+
+/* ---------- 镜头晃动 / 画面异常 ---------- */
+#app.shake #gl, #app.shake #grain, #app.shake #dark{ animation:shake .42s ease-out; }
+@keyframes shake{
+  0%,100%{ transform:translate(0,0) }
+  20%{ transform:translate(-3px,2px) }
+  40%{ transform:translate(3px,-2px) }
+  60%{ transform:translate(-2px,-2px) }
+  80%{ transform:translate(2px,1px) }
+}
+#app.glitch #gl{ animation:glitch .5s steps(2) 2; }
+@keyframes glitch{
+  0%{ filter:none }
+  25%{ filter:hue-rotate(35deg) saturate(1.6) contrast(1.2) }
+  50%{ filter:invert(.08) saturate(.7) }
+  75%{ filter:hue-rotate(-25deg) brightness(1.2) }
+  100%{ filter:none }
+}
+
+/* ---------- 大屏适配 ---------- */
+@media (min-width:720px){
+  :root{ --panel-h:52vh; }
+  #gl{ height:calc(100% - var(--panel-h)); }
+  .tabpane{ padding:12px 16px 28px; }
+  .modal{ max-width:520px; }
+  #digBtn{ right:24px; width:104px; height:104px; }
+}
+@media (max-height:620px){
+  :root{ --panel-h:44vh; --hud-h:84px; }
+  .stat-depth .v{ font-size:26px; }
+}
+</style>
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ===== 3D 场景 ===== -->
+  <canvas id="gl"></canvas>
+  <div id="grain" aria-hidden="true"></div>
+  <div id="dark" aria-hidden="true"></div>
+
+  <!-- ===== 顶部 HUD ===== -->
+  <header id="hud">
+    <div class="hud-main">
+      <div class="stat stat-depth">
+        <span class="k">深度</span>
+        <span class="v" id="hDepth">0.0</span><span class="u">m</span>
+      </div>
+      <div class="stat">
+        <span class="k">金币</span>
+        <span class="v amber" id="hCoins">0</span>
+      </div>
+      <div class="stat">
+        <span class="k">矿石</span>
+        <span class="v cyan" id="hOre">0</span>
+      </div>
+    </div>
+    <div class="hud-sub">
+      <div class="chip chip-layer" id="hLayer">泥土层</div>
+      <div class="chip"><span class="k">产出</span><span id="hCps">0</span><span class="k">/s</span></div>
+      <div class="chip"><span class="k">岩芯</span><span id="hCores" class="amber">0</span></div>
+      <div class="chip"><span class="k">离线</span><span id="hOff">0</span><span class="k">/h</span></div>
+      <div class="chip chip-log" id="hNextLog">下一条日志 1000m</div>
+    </div>
+    <div id="depthBar"><i id="depthBarFill"></i></div>
+  </header>
+
+  <!-- ===== 挖掘按钮（悬浮操作） ===== -->
+  <button id="digBtn" aria-label="挖掘">
+    <span class="dig-core">⛏</span>
+    <span class="dig-label">挖掘</span>
+    <span class="dig-sub" id="digSub">+1.0m</span>
+  </button>
+
+  <!-- ===== 浮动数字层 ===== -->
+  <div id="floaters" aria-hidden="true"></div>
+
+  <!-- ===== 底部面板 ===== -->
+  <section id="panel">
+    <nav id="tabs">
+      <button class="tab active" data-tab="drill">钻探</button>
+      <button class="tab" data-tab="crew">队伍</button>
+      <button class="tab" data-tab="arch">档案</button>
+      <button class="tab" data-tab="set">设置</button>
+    </nav>
+    <div id="tabBody">
+      <div class="tabpane active" id="pane-drill"></div>
+      <div class="tabpane" id="pane-crew"></div>
+      <div class="tabpane" id="pane-arch"></div>
+      <div class="tabpane" id="pane-set"></div>
+    </div>
+  </section>
+
+  <!-- ===== 弹窗 / 提示 ===== -->
+  <div id="modalLayer" class="hidden"></div>
+  <div id="toasts"></div>
+
+  <!-- ===== 启动遮罩 ===== -->
+  <div id="boot">
+    <div class="boot-inner">
+      <div class="boot-title">深渊 · ABYSS</div>
+      <div class="boot-msg" id="bootMsg">正在载入引擎…</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* ==========================================================================
+ *  游戏主程序（原 main.js，已内联，使本文件可单独双击运行）
+ *  §0 CONFIG  §1 数据表  §2 叙事文本  §3 工具  §4 Sound  §5 存档
+ *  §6 经济    §7 SceneWorld  §7.5 FX 特效  §8 UI  §9 主循环
+ * ========================================================================== */
+function __ABYSS_MAIN__() {
+/* ==========================================================================
+ *  深渊 · ABYSS
+ *  一款关于"向下"的增量游戏 (Idle / Incremental)
+ *  ----------------------------------------------------------------------
+ *  依赖：Three.js（UMD，由 index.html 从 CDN 注入全局 THREE）
+ *  全部贴图由 Canvas 程序化生成，全部音频由 Web Audio API 程序化合成，
+ *  不依赖任何外部图片 / 音频文件。
+ *
+ *  文件结构：
+ *    §0  CONFIG            —— 所有可调数值集中在这里
+ *    §1  LAYERS / BUILDINGS / UPGRADES / ACHIEVEMENTS
+ *    §2  LOGS（叙事文本）
+ *    §3  工具函数（数字格式化 / 对象池 / 节流 …）
+ *    §4  AudioEngine（Web Audio 程序化音频）
+ *    §5  存档系统
+ *    §6  经济系统（派生数值 / 挖掘 / 挂机 / 转生）
+ *    §7  SceneWorld（Three.js 竖井场景 + 粒子）
+ *    §8  UI（HUD / 面板 / 弹窗 / 浮动数字 / 打字机）
+ *    §9  主循环与启动
+ * ========================================================================== */
+(function () {
+'use strict';
+
+/* ==========================================================================
+ * §0  CONFIG —— 想改数值曲线，改这里就够了
+ * ========================================================================== */
+const CONFIG = {
+  version : 3,
+  saveKey : 'abyss_save_v3',
+  /* 数值版本号：改动成本表 / 阻力等平衡参数后 +1。
+     读取旧版本存档时只保留「档案日志 / 成就 / 转生次数 / 岩芯 / 设置」，
+     经济部分（深度、金币、矿石、建筑、升级）重置，避免旧数值污染新曲线。 */
+  balanceVersion : 2,
+
+  /* ---- 时间与存档 ---- */
+  autosaveInterval : 5,        // 自动保存间隔（秒）
+  offlineCapHours  : 8,        // 离线收益上限（小时）
+  offlineMinSec    : 60,       // 少于此秒数不弹离线结算
+  offlineSteps     : 120,      // 离线结算模拟步数（越大越精确越慢）
+
+  /* ---- 挖掘基础 ---- */
+  click : {
+    baseDepth    : 0.30,       // 每点基础推进（米）：点击只在前期主导，后期靠矿工
+    orePerMeter  : 1.0,        // 每米基础矿石产出
+    critChance   : 0.02,       // 暴击概率（深度 ×5）
+    critMult     : 5
+  },
+
+  /* ---- 深度推进阻力 ---- */
+  depth : {
+    resistanceBase : 1.0011,   // 阻力 = base^depth（节奏墙的斜率）
+    worldPerMeter  : 0.06,     // 1 米 = 0.06 世界单位（3D 场景用）
+    priceDepthScale: 3000      // 深度连续提价：单价 = 矿层价 × (1 + 深度/该值)，设很大即关闭
+  },
+
+  /* ---- 经济 ---- */
+  /* 成本增长率：数值越小 → 建筑数量增长越快 → 推进越快（1.15~1.22 为宜） */
+  costGrowth : 1.18,           // 建筑成本 = baseCost * 1.18^已拥有
+  sellRatio  : 1.0,            // 矿石出售系数（1 = 按矿层单价全额）
+
+  /* ---- 转生（岩芯提取）----
+   *  数值对照表（模拟器实测，理性贪心玩家 + 前 15 分钟点击，单位：分钟）：
+   *  ┌──────┬─────────────┬──────────┬──────────┬───────────┐
+   *  │ 周目 │ 转生时点    │ 该轮最深 │ 新获岩芯 │ 累计岩芯  │
+   *  ├──────┼─────────────┼──────────┼──────────┼───────────┤
+   *  │  1   │ 25 – 35 min │ ≈2000 m  │ 4        │ 4         │
+   *  │  2   │ 20 – 30 min │ ≈5000 m  │ 7        │ 11        │
+   *  │  3   │ 15 – 25 min │ ≈8000 m  │ 8        │ 19        │
+   *  │  4   │ 15 – 20 min │ ≈10000 m │ 10       │ 29        │
+   *  └──────┴─────────────┴──────────┴──────────┴───────────┘
+   *  岩芯 = floor(sqrt(最深深度 / corePerDepth))；每枚 +10% 速度 / +5% 售价，
+   *  配合二周目解锁的地热电站 / 钻井阵列，每轮明显快于上一轮（爽感递增）。
+   *  单轮不转生一路挖：约 7 小时到 9500 m；五周目可达 12000 m 未知层。
+   *
+   *  【调参方向】整体太快 → 等比放大 BUILDINGS.baseCost（×2 约慢 1.6 倍）
+   *            前期太快 → 调小 CONFIG.click.baseDepth（点击是前期主引擎）
+   *            后期卡死 → 调小 CONFIG.depth.resistanceBase 或 priceDepthScale
+   * ------------------------------------------------------------------- */
+  prestige : {
+    corePerDepth : 100,        // 岩芯 = floor(sqrt(最深深度 / 100))
+    speedPerCore : 0.10,       // 每枚岩芯 +10% 挖掘速度
+    pricePerCore : 0.05,       // 每枚岩芯 +5% 矿石售价
+    minDepth     : 500,        // 低于此深度不允许转生（防误触）
+  },
+
+  /* ---- 特效 / 性能 ---- */
+  fx : {
+    maxParticles   : 800,      // 粒子总数硬上限（超出复用最老的）
+    quality        : { low: 240, mid: 520, high: 800 },
+    veinCount      : 240,      // 井壁矿脉点数
+    shaftRadius    : 6,        // 竖井半径
+    shaftHeight    : 130,      // 竖井（可见段）高度
+    textureRepeatY : 9,        // 岩壁贴图纵向重复次数
+    shakeDecay     : 3.4,      // 镜头晃动衰减
+    fogStartDepth  : 4000,     // 从此深度开始加强体积雾
+    fogEndDepth    : 12000,    // 雾最浓处
+    fogBase        : 0.010,
+    fogMax         : 0.055,
+    darkStartDepth : 3000,     // 从此深度开始画面压暗
+  },
+
+  /* ---- 音频 ---- */
+  audio : {
+    sfxVolume     : 1.0,        // 音效默认音量（滑块 0~1，默认拉满）
+    bgmVolume     : 1.0,        // BGM 默认音量（滑块 0~1，默认拉满）
+    /* 音量默认值版本号：改动上面的默认音量后 +1，
+       旧存档会被迁移到新的默认音量（仅影响音量，不动其他设置） */
+    audioVersion  : 2,
+    muted         : false,
+    digThrottle   : 0.055,     // 挖掘音效节流（秒），避免同帧多次触发
+    bgmBaseFreq   : 58,        // drone 基频（Hz）
+    bgmNoteGap    : [1.7, 4.6] // 随机音符间隔（秒）
+  },
+
+  /* ---- 叙事 ---- */
+  narrative : {
+    typeSpeed        : 20,     // 打字机速度（毫秒/字）
+    rewardCoinSeconds: 30,    // 金币类奖励 = 当前秒产出 × 该秒数（过大会造成链式爆发）
+    rewardProdPct    : 0.05,   // 产能类奖励 = 永久 +5%
+  }
+};
+
+/* ==========================================================================
+ * §1  数据表
+ * ========================================================================== */
+
+/* ---- 矿层：深度 → 单价 / 点击系数 / 配色 ---- */
+const LAYERS = [
+  { from:0,     name:'泥土层', price:1,    clickCoeff:1.00, oreCoeff:1.00, color:0x8a6a45, fog:0x1a120b,
+    tip:'表层腐殖土与碎石。钻头在这里几乎不需要用力。' },
+  { from:100,   name:'砂岩层', price:3,    clickCoeff:1.05, oreCoeff:1.05, color:0xb6b0a2, fog:0x15161a,
+    tip:'致密的石英砂岩，颗粒均匀得不像自然沉积。' },
+  { from:300,   name:'铁矿层', price:8,    clickCoeff:1.12, oreCoeff:1.10, color:0x9c4b2f, fog:0x1a0f0b,
+    tip:'赤铁矿脉呈条带状分布，断面泛着陈旧的锈红。' },
+  { from:800,   name:'银矿层', price:25,   clickCoeff:1.20, oreCoeff:1.15, color:0xcfd8de, fog:0x101318,
+    tip:'冷白色的辉银矿在灯下几乎不反光，却沉得反常。' },
+  { from:2000,  name:'金矿层', price:80,   clickCoeff:1.30, oreCoeff:1.22, color:0xdca63c, fog:0x181207,
+    tip:'自然金以细脉形式充填在裂隙里，像凝固的血管。' },
+  { from:5000,  name:'宝石层', price:300,  clickCoeff:1.45, oreCoeff:1.30, color:0x8256d8, fog:0x120b22,
+    tip:'刚玉、尖晶石与某种未被命名的紫色晶体共生。' },
+  { from:12000, name:'未知层', price:1200, clickCoeff:1.65, oreCoeff:1.45, color:0x2ad0c8, fog:0x02100f,
+    tip:'钻探手册到这里就结束了。以下的深度没有手册。' }
+];
+
+/* ---- 建筑（矿工 / 设施）----
+ * dps      : 每秒推进米数（原始值，尚未除以阻力）
+ * dpsAdd   : 每级 +X% 挖掘速度（线性叠加）
+ * oreAdd   : 每级 +X% 矿石产出
+ * priceAdd : 每级 +X% 矿石售价
+ *
+ * 【成本标定】baseCost ≈ 边际收益 × CONFIG 目标回本时间（约 600 秒）。
+ *   边际收益 = dps × 该解锁深度的矿石单价。
+ *   回本时间越短 → 产能指数增长率越高 → 深度推进越快。
+ *   想整体加速/减速：等比缩放本表所有 baseCost 即可（×0.5 约快一倍）。
+ * --------------------------------------------------------------------- */
+const BUILDINGS = [
+  { id:'miner',   icon:'⛏️', name:'学徒矿工',   baseCost:180,    dps:0.3,   unlock:0,
+    desc:'从附近的村子雇来的年轻人。他们相信这是口普通的井。' },
+  { id:'blaster', icon:'🧨', name:'爆破班组',   baseCost:7200,   dps:4,     unlock:150,
+    desc:'装药、封堵、撤离、引爆。他们从不讨论下面传回来的声音。' },
+  { id:'rig',     icon:'🛠️', name:'气动钻机',   baseCost:24000,  dps:26,    unlock:400,
+    desc:'三缸活塞，压缩空气驱动的钢铁手臂。噪声大到盖过井壁的回响。' },
+  { id:'refine',  icon:'⚗️', name:'选矿厂',     baseCost:1.2e5,    oreAdd:0.30, unlock:1000,
+    desc:'把废石留在井下，只把有价值的部分送上来。每级 +30% 矿石产出。' },
+  { id:'mole',    icon:'🚜', name:'隧道掘进机', baseCost:1.4e6, dps:190,   unlock:1800,
+    desc:'全断面掘进，刀盘直径 6.4 米。操作员说它"啃"的节奏会自己变化。' },
+  { id:'contract',icon:'📜', name:'市场合约',   baseCost:5e6,  priceAdd:0.40, unlock:3000,
+    desc:'提前锁定出货价的长期协议。每级 +40% 矿石售价。' },
+  { id:'plasma',  icon:'🔥', name:'等离子钻头', baseCost:1.8e8,  dps:1500,  unlock:5000,
+    desc:'用 4000℃ 的射流熔化岩层。井壁因此在断面处呈现玻璃质光泽。' },
+  { id:'array',   icon:'🛰️', name:'自动钻井阵列', baseCost:2.4e9, dps:12000, unlock:7000, needPrestige:1,
+    desc:'【二周目解锁】无人值守的钻探矩阵，按岩芯记录自主修正井斜。' },
+  { id:'geo',     icon:'♨️', name:'地热电站',   baseCost:1.5e9,  dpsAdd:0.25, unlock:7000, needPrestige:1,
+    desc:'【二周目解锁】取用井底异常热流发电。每级 +25% 全局挖掘速度。' },
+  { id:'reson',   icon:'🔊', name:'共振发生器', baseCost:8e10, priceAdd:0.60, unlock:9000, needPrestige:2,
+    desc:'【三周目解锁】让整条井筒以同一频率共振，矿石在升井途中自行提纯。每级 +60% 售价。' }
+];
+
+/* ---- 可重复升级（钻头 / 增压 / 探路 / 爆破）----
+ * kind: clickPow(乘算 pow(per,lv)) | oreAdd | priceAdd | speedAdd(线性叠加)
+ * --------------------------------------------------------------------- */
+const UPGRADES = [
+  { id:'drill',  icon:'🔩', name:'钻头等级', baseCost:900,    costMul:2.6,  kind:'clickPow', per:1.28, unit:'级',
+    desc:'更高强度的合金刀头。每级点击深度 ×1.28。' },
+  { id:'hydro',  icon:'💧', name:'液压增压', baseCost:6000,   costMul:1.9,  kind:'oreAdd',   per:0.08, unit:'级',
+    desc:'把液压回路压力推到红线以上。每级 +8% 矿石产出。' },
+  { id:'sonar',  icon:'📡', name:'声波探路', baseCost:45000,  costMul:2.0,  kind:'priceAdd', per:0.06, unit:'级',
+    desc:'提前探明矿脉走向，只挖值钱的那部分。每级 +6% 矿石售价。' },
+  { id:'demo',   icon:'💥', name:'深层爆破', baseCost:4e5,    costMul:2.3,  kind:'speedAdd', per:0.10, unit:'级',
+    desc:'在钻头前方预裂岩层。每级 +10% 全局挖掘速度（含点击与自动）。' }
+];
+
+/* ---- 成就（转生保留）---- */
+const ACHIEVEMENTS = [
+  { id:'d100',   name:'初次下潜',   desc:'到达 100 m',                test:s=>s.maxDepth>=100 },
+  { id:'d1000',  name:'千米之下',   desc:'到达 1000 m',               test:s=>s.maxDepth>=1000 },
+  { id:'log1',   name:'第一份档案', desc:'解锁第 1 条勘探日志',        test:s=>s.logs.length>=1 },
+  { id:'miner50',name:'劳工大队',   desc:'同时拥有 50 名学徒矿工',     test:s=>(s.b.miner||0)>=50 },
+  { id:'core1',  name:'岩芯提取',   desc:'完成第 1 次转生',           test:s=>s.prestige>=1 },
+  { id:'log10',  name:'档案管理员', desc:'解锁 10 条勘探日志',         test:s=>s.logs.length>=10 },
+  { id:'d12000', name:'未知层',     desc:'到达 12000 m',              test:s=>s.maxDepth>=12000 },
+  { id:'alllog', name:'深渊全知',   desc:'解锁全部勘探日志',           test:s=>s.logs.length>=LOGS.length }
+];
+
+/* ==========================================================================
+ * §2  叙事文本：五个阶段，共 31 条勘探日志
+ *      风格：SCP 档案 + 硬科幻调查记录，语气冷静克制，越往下越不对劲
+ *      每条触发时给予一次性奖励（coins = 金币爆发 / prod = 永久产能 +5%）
+ * ========================================================================== */
+const CHAPTERS = [
+  { id:'C1', name:'空洞', range:'1000 – 3200 m', sub:'岩芯样本中出现不该存在的完美球形空腔' },
+  { id:'C2', name:'回声', range:'3600 – 5700 m', sub:'声呐探测返回了比发射时间更早的回波' },
+  { id:'C3', name:'活层', range:'6100 – 8300 m', sub:'岩石样本被证实具有缓慢代谢活动' },
+  { id:'C4', name:'注视', range:'8700 – 10900 m', sub:'钻头回传画面的黑暗中，有东西在回看' },
+  { id:'C5', name:'底部', range:'11300 m 以下',   sub:'这颗星球本身是某个巨大存在的一部分' }
+];
+
+const LOGS = [
+  /* ---------- 阶段一：空洞 ---------- */
+  { id:'L001', ch:'C1', depth:1000, title:'球形空腔', reward:'coins',
+    text:'勘探日志 #001　深度 1000 m　等级：Safe\n\n岩芯样本 K-1000 在完整岩层内部发现直径 4.2 cm 的球形空腔。腔壁表面粗糙度 Ra ≤ 0.05 μm，优于本井任何机械加工面，且无任何钻具接触痕迹。\n\n结论：非钻探成因。\n处置：封存待复检。' },
+  { id:'L002', ch:'C1', depth:1430, title:'第二处', reward:'prod',
+    text:'勘探日志 #002　深度 1100 m\n\n该层位出现第二处空腔。将两处空腔置于三维坐标系中，与 1000 m 处样本共同构成边长 11.7 m 的正四面体的两个顶点。\n\n概率评估：偶然分布 < 0.3%。\n备注：正四面体的另外两个顶点分别位于 1120 m 与 1155 m。我们尚未钻到那里。我们会在那里找到它们。' },
+  { id:'L003', ch:'C1', depth:1860, title:'被清空过', reward:'coins',
+    text:'勘探日志 #003　深度 1200 m\n\n空腔内部气体取样完成。成分：无。残余压强 3.1×10⁻⁹ Pa，低于本井任何已知层位三个数量级。\n\n修正上一份日志的措辞：空腔不是"空的"。它是"被清空过"的。这两者之间有区别，而我不知道该怎么向审查委员会解释这个区别。' },
+  { id:'L004', ch:'C1', depth:2290, title:'零延迟回波', reward:'prod',
+    text:'勘探日志 #004　深度 1300 m\n\n声呐预览显示空腔壁对声波完全无反射——吸收率 100%。我们把探头伸进空腔，读数回来了，比发射晚了 0 秒。\n\n信号在介质中传播需要时间。除非它根本没有传播，除非它一直就在那里等着被读取。\n\n时钟已校验三次，NTP 同步正常。' },
+  { id:'L005', ch:'C1', depth:2720, title:'1 : 1.618', reward:'coins',
+    text:'勘探日志 #005　深度 1400 m\n\n岩芯中出现第 7 处空腔。全部空腔半径之比为：\n1 : 1.618 : 2.618 : 4.236 : 6.854 : 11.090 : 17.944\n\n现场工程师建议停止记录这些比值。\n建议已驳回。继续记录。' },
+  { id:'L006', ch:'C1', depth:3150, title:'聚拢', reward:'prod',
+    text:'勘探日志 #006　深度 1500 m　等级：Euclid\n\n今日 04:12，空腔总数 13。\n\n它们不再随机分布。以本井为原点做时间序列回归，13 处空腔的平均距离在过去 500 m 钻进中缩短了 41 米。\n\n它们正在向我们聚拢。\n\n申报等级：Euclid。请求增派两名结构工程师——不是因为危险，是因为我需要有人确认我也看到了。' },
+
+  /* ---------- 阶段二：回声 ---------- */
+  { id:'L007', ch:'C2', depth:3580, title:'T 减 0.43 秒', reward:'coins',
+    text:'勘探日志 #007　深度 1650 m\n\n主动声呐第 41 次探测。回波返回时间戳为 T−0.43 s，早于发射时间戳。\n\n已校验时钟三次。已更换授时模块一次。已请第三方计量院远程比对一次。\n\n结论：回波比探测更早。这不是误差，这是顺序。' },
+  { id:'L008', ch:'C2', depth:4010, title:'第 42 次', reward:'prod',
+    text:'勘探日志 #008　深度 1850 m\n\n我们把发射功率降到零，仍然收到了回波。\n\n回波内容与第 41 次探测完全一致，包括我们尚未发射的第 42 次的编码序列。该编码由值班工程师在收到回波后才生成，生成时间晚于回波接收 6 分 12 秒。\n\n建议：停止预测未来会发射什么。' },
+  { id:'L009', ch:'C2', depth:4440, title:'四百倍降速', reward:'coins',
+    text:'勘探日志 #009　深度 2050 m\n\n音频组把回波降速 400 倍播放。波形可辨认出清晰的人声特征：基频 92 Hz，音节时长分布符合人类语言区间。\n\n词汇不属于任何已知语系。但语法结构——主语前置、修饰语后置、数量词独立成句——与本日志的书写格式完全相同。\n\n它在用我们的句子结构说话。' },
+  { id:'L010', ch:'C2', depth:4870, title:'我们自己的声音', reward:'prod',
+    text:'勘探日志 #010　深度 2200 m\n\n回波开始包含我们自己的声音。\n\n是昨天下班前的一段对话录音，时长 4 分 37 秒，内容包括我已经忘记的那部分。回放确认：那确实是我的声音。我不记得说过那些话，但我无法否认那是喉部共振、齿音与呼吸节奏都完全匹配的我的声音。\n\n全组今日起禁止在井口区域交谈。' },
+  { id:'L011', ch:'C2', depth:5300, title:'四种声速', reward:'coins',
+    text:'勘探日志 #011　深度 2350 m\n\n停止对讲，全员改为纸笔。\n\n声波在井壁中的传播速度测量值为 5.9×10³ m/s。同一测点、同一仪器、同一分钟内回传了 4 组不同的速度值：5.9×10³、6.4×10³、4.1×10³、−0.2×10³。\n\n最后一组为负。负速度意味着波在到达之前就已经离开。' },
+  { id:'L012', ch:'C2', depth:5730, title:'你们听得见', reward:'prod',
+    text:'勘探日志 #012　深度 2500 m　等级：Euclid\n\n声呐组请求关闭设备。请求于 21:44 批准。\n\n21:44:53，已断电的声呐仍然发出了一次回波。发射机处于开路状态，供电母线电压 0 V。\n\n回波内容（降速 400 倍，转写）：\n\n"你们听得见。"' },
+
+  /* ---------- 阶段三：活层 ---------- */
+  { id:'L013', ch:'C3', depth:6160, title:'岩石在吸水', reward:'coins',
+    text:'勘探日志 #013　深度 2700 m\n\n岩芯 L-2700 在密封容器内质量增加 0.7 mg / 24 h，连续观测 6 日，增量线性。\n\n环境湿度恒定 4%，无凝结可能，容器已做空白对照（对照样质量不变）。\n\n岩石在吸水。' },
+  { id:'L014', ch:'C3', depth:6590, title:'定向输运', reward:'prod',
+    text:'勘探日志 #014　深度 2950 m\n\n同位素示踪：岩样在 6 小时内将标记的碳-13 从外缘转运至中心。\n\n转运路径呈分枝状，末端闭合，分枝角集中在 34°–38° 区间。这不属于任何已知矿物晶体生长形态。这是输运网络：有主干、有末梢、有闭合回路。\n\n它不排泄，但它在循环。' },
+  { id:'L015', ch:'C3', depth:7020, title:'它在愈合', reward:'coins',
+    text:'勘探日志 #015　深度 3200 m\n\n岩样对机械刺激产生响应。\n\n以 5 N 力压下探针，14 分钟后该处硬度上升 12%，压痕深度减小 0.3 mm。对照组的惰性玄武岩无变化。\n\n它在愈合。速度极慢，但它知道哪里受伤了。' },
+  { id:'L016', ch:'C3', depth:7450, title:'代谢速率', reward:'prod',
+    text:'勘探日志 #016　深度 3450 m\n\n代谢速率测定完成：0.0003 mol / g·day。\n\n比盾纤毛虫慢四个数量级。按此速率，一块 1 kg 岩样完成一次完整更新需要约 900 年。\n\n但它从不停止，也不排泄，且不表现出任何衰老特征。我们不知道它从什么时候开始的。' },
+  { id:'L017', ch:'C3', depth:7880, title:'不要喂它', reward:'coins',
+    text:'勘探日志 #017　深度 3700 m\n\n对照实验：\n· 持续供氧 72 小时 → 代谢速率下降 61%\n· 持续供氮 72 小时 → 代谢速率下降 44%\n· 供给葡萄糖溶液 → 代谢速率下降 88%\n· 不供给任何东西 → 代谢速率维持基线\n\n只有在我们什么都不给它的时候，它才活跃。\n\n建议：不要喂它。' },
+  { id:'L018', ch:'C3', depth:8310, title:'二十六小时四十一分', reward:'prod',
+    text:'勘探日志 #018　深度 4000 m　等级：Keter\n\n岩样切片在显微镜下显示周期性明暗变化。周期 26 小时 41 分，误差 ±4 秒，连续 11 个周期无一例外。\n\n地球自转周期 23 小时 56 分。潮汐周期 12 小时 25 分。昼夜节律 24 小时 10 分。\n\n26 小时 41 分不是这颗星球的任何节律。\n\n申报等级：Keter。' },
+
+  /* ---------- 阶段四：注视 ---------- */
+  { id:'L019', ch:'C4', depth:8740, title:'比黑更黑', reward:'coins',
+    text:'勘探日志 #019　深度 4250 m\n\n钻头回传画面第 8 通道（下视广角）出现暗斑，视直径约 3°。\n\n像素分析：暗斑区域的噪声水平低于传感器本底噪声。这在物理上不应发生——任何成像器件都有读出噪声，而这里的噪声是负值修正后的零。\n\n它比黑更黑。' },
+  { id:'L020', ch:'C4', depth:9170, title:'透视不成立', reward:'prod',
+    text:'勘探日志 #020　深度 4500 m\n\n暗斑在过去 250 m 钻进中保持恒定视直径。\n\n透视几何不成立：任何固定物体在逼近时视直径必然增大。只有两种情况能解释——它不是固定大小的物体，或者它正以与我们完全相同的速度下降。\n\n我们每小时变速两次。它跟着变速两次。' },
+  { id:'L021', ch:'C4', depth:9600, title:'关灯测试', reward:'coins',
+    text:'勘探日志 #021　深度 4800 m\n\n关闭全部照明 90 秒。暗斑仍然可见，亮度未变。\n\n照明恢复后，暗斑消失了 3 秒，然后回到原位——与消失前完全相同的像素坐标，误差 0。\n\n附录：值班员报告说，在照明恢复的那 3 秒里，"感觉被人让开了位置"。该描述未采纳进正式记录。' },
+  { id:'L022', ch:'C4', depth:10030, title:'瞳孔反射谱', reward:'prod',
+    text:'勘探日志 #022　深度 5100 m　存档编号 4051-ABYSS\n\n我们对暗斑发射了一次定向声呐（功率 0.5 W，脉宽 20 ms）。\n\n回波回来了。频谱分析显示出典型的瞳孔反射特征：入射光/声能量增强时反射截面收缩 18%，减弱时扩张 23%，响应延迟 340 ms。\n\n340 ms 是人类瞳孔对光反射的延迟量级。' },
+  { id:'L023', ch:'C4', depth:10460, title:'自动对焦', reward:'coins',
+    text:'勘探日志 #023　深度 5500 m\n\n钻头摄像头的自动对焦开始锁定暗斑，而非井壁。\n\n已手动禁用自动对焦，共 4 次。第 4 次恢复后，对焦系统不再响应任何指令，焦距恒定锁定在 2.11 m——即暗斑所在距离。\n\n更换摄像头无效。新的摄像头在 40 分钟内复现同一行为。' },
+  { id:'L024', ch:'C4', depth:10890, title:'它在看', reward:'prod',
+    text:'勘探日志 #024　深度 6000 m　等级：Keter\n\n我确认了：暗斑不是物体，是遮挡。\n\n有东西挡在镜头和我们之间，它一直挡在那里，从地表就挡在那里。我们看到的所有"黑暗"，都是它的一部分。\n\n它不攻击。它不阻止我们下钻。它只是在看我们看完了没有。\n\n钻探继续。' },
+
+  /* ---------- 阶段五：底部 ---------- */
+  { id:'L025', ch:'C5', depth:11320, title:'地温梯度终止', reward:'coins',
+    text:'勘探日志 #025　深度 6500 m\n\n地温梯度异常终止。\n\n自 6000 m 起温度恒定 4.2 °C，与本地地表年平均气温一致，误差 0.1 °C，已连续记录 500 m。\n\n我们不是在向热源下降。这颗星球在我们的下方没有热。' },
+  { id:'L026', ch:'C5', depth:11750, title:'下方有质量', reward:'prod',
+    text:'勘探日志 #026　深度 7000 m\n\n重力测量：g 值自 6400 m 起以每千米 0.03% 的速率增加，方向恒定指向正下方。\n\n反演结果：下方存在额外质量，量级 10²² kg，深度未知（> 20 km）。\n\n作为参照：月球质量 7.3×10²² kg。\n\n我们脚下不到一个月球。' },
+  { id:'L027', ch:'C5', depth:12180, title:'十一天周期', reward:'coins',
+    text:'勘探日志 #027　深度 7600 m\n\n磁场读数指向一个缓慢旋转的偶极子。旋转周期约 11 天，轴向与自转轴夹角 17°。\n\n行星磁极不会以 11 天为周期旋转。地核发电机过程的时间尺度是万年。\n\n除非那个偶极子不属于这颗行星。' },
+  { id:'L028', ch:'C5', depth:12610, title:'生物组织级衰减', reward:'prod',
+    text:'勘探日志 #028　深度 8300 m\n\n地震波反演：我们下方的介质不是岩石。\n\n它是分层的、有弹性的、含液体的。纵波在其中衰减 0.2 dB/km。\n\n作为参照：花岗岩 0.02 dB/km，含水砂岩 0.35 dB/km，哺乳动物软组织 0.18 dB/km。\n\n我们正在钻过某种与软组织声学特性相当的分层介质。' },
+  { id:'L029', ch:'C5', depth:13040, title:'没有年代', reward:'coins',
+    text:'勘探日志 #029　深度 9200 m\n\n岩层年龄测定失败。\n\n样品中所有放射性同位素显示同一衰变计数，与取样深度、取样位置、取样批次均无关。铀-238、钾-40、铷-87 给出完全一致的"已衰变时长"。\n\n这不可能是真的，除非：这颗星球没有内部年代。它被一次性造出来，并且被造出来的时候就是现在这个样子。' },
+  { id:'L030', ch:'C5', depth:13470, title:'孔隙', reward:'prod',
+    text:'勘探日志 #030　深度 10500 m\n\n我明白了空腔是什么。\n\n它们是孔隙。\n\n我们在一个更大的东西的身体里往下钻。我们已经钻了 10.5 公里，还没有穿透表皮——表皮的定义是"出现血管之前"。\n\n我们还没有遇到血管。但重力数据说血管在下面，它们很粗。' },
+  { id:'L031', ch:'C5', depth:13900, title:'心跳', reward:'coins',
+    text:'勘探日志 #031　深度 12000 m　等级：Apollyon\n\n钻头停了。\n\n不是故障。动力正常、扭矩为零、岩层硬度读数低于上一段——它不再让我们往下。\n\n停止前 6 秒，井底传回低频振动，频率 0.0000104 Hz，换算周期 26 小时 41 分。与日志 #018 中岩样的明暗周期一致。\n\n底部有心跳。周期 26 小时 41 分。\n\n日志结束。若你读到这里，请向地表汇报：\n\n不要继续钻。不要停。不要让它知道我们已经听见了。' }
+];
+
+/* ==========================================================================
+ * §3  工具函数
+ * ========================================================================== */
+
+/** 数字格式化：≥1e6 使用 K/M/B/T/aa/ab… 后缀 */
+const LETTERS = 'abcdefghijklmnopqrstuvwxyz';
+function fmt(n) {
+  if (n === null || n === undefined || !isFinite(n)) return '∞';
+  if (n < 0) return '-' + fmt(-n);
+  if (n < 1e6) {
+    const v = Math.floor(n);
+    return String(v).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  }
+  const tier = Math.floor(Math.log10(n) / 3);           // 2 → 1e6
+  if (tier > 60) return '∞';
+  let suffix;
+  if (tier === 2) suffix = 'M';
+  else if (tier === 3) suffix = 'B';
+  else if (tier === 4) suffix = 'T';
+  else {
+    const k = tier - 5;                                  // 0 → aa (1e15)
+    suffix = LETTERS[k % 26].repeat(Math.floor(k / 26) + 1);
+  }
+  const m = n / Math.pow(10, tier * 3);
+  const s = m < 10 ? m.toFixed(2) : (m < 100 ? m.toFixed(1) : m.toFixed(0));
+  return s + suffix;
+}
+/** 深度专用：浅处保留一位小数 */
+function fmtDepth(d) {
+  if (d < 1000) return d.toFixed(1);
+  return fmt(Math.floor(d));
+}
+/** 时间格式化：秒 → "2小时13分" */
+function fmtTime(sec) {
+  sec = Math.max(0, Math.floor(sec));
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+  if (h > 0) return h + ' 小时 ' + m + ' 分';
+  if (m > 0) return m + ' 分 ' + s + ' 秒';
+  return s + ' 秒';
+}
+const clamp = (v, a, b) => v < a ? a : (v > b ? b : v);
+const lerp  = (a, b, t) => a + (b - a) * t;
+const rand  = (a, b) => a + Math.random() * (b - a);
+const randInt = (a, b) => Math.floor(rand(a, b + 1));
+const $  = id => document.getElementById(id);
+const el = (tag, cls, html) => {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (html !== undefined) e.innerHTML = html;
+  return e;
+};
+/** 节流：同一时间窗内只执行一次 */
+function throttleFn(fn, ms) {
+  let last = -1e9;
+  return function () {
+    const now = performance.now();
+    if (now - last < ms) return false;
+    last = now;
+    fn.apply(null, arguments);
+    return true;
+  };
+}
+
+/* ==========================================================================
+ * §4  Sound —— 全部音频由 Web Audio API 程序化合成，无外部音频文件
+ *      · 挖掘：低频噪声 burst + 快速衰减包络（带节流）
+ *      · 购买：上行两音符方波琶音
+ *      · 里程碑：低频轰鸣 + 卷积混响
+ *      · 日志：不和谐高频颤音
+ *      · BGM  ：失谐 drone + 五声音阶随机音符 + 深度驱动的音高/不协和度
+ * ========================================================================== */
+const Sound = {
+  ctx:null, master:null, sfxBus:null, bgmBus:null, reverb:null,
+  noiseBuf:null, ready:false,
+  bgmOn:false, bgmTimer:null, drone:[], wind:null, lastDig:-1e9,
+
+  /** 必须在用户首次交互后调用（浏览器自动播放策略） */
+  init() {
+    if (this.ctx) return true;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return false;
+    try { this.ctx = new AC(); } catch (e) { return false; }
+    const ctx = this.ctx;
+    this.master = ctx.createGain();
+    this.master.gain.value = S.settings.muted ? 0 : 1;
+    this.master.connect(ctx.destination);
+
+    this.sfxBus = ctx.createGain();
+    this.sfxBus.gain.value = S.settings.sfx;
+    this.sfxBus.connect(this.master);
+
+    this.bgmBus = ctx.createGain();
+    this.bgmBus.gain.value = S.settings.bgm * 0.75;
+    this.bgmBus.connect(this.master);
+
+    // 程序化脉冲响应（混响）
+    try {
+      this.reverb = ctx.createConvolver();
+      this.reverb.buffer = this.makeIR(3.0, 2.6);
+      const rg = ctx.createGain(); rg.gain.value = 0.6;
+      this.reverb.connect(rg); rg.connect(this.master);
+    } catch (e) { this.reverb = null; }
+
+    this.noiseBuf = this.makeNoise(2.0);
+    this.ready = true;
+    return true;
+  },
+
+  makeIR(dur, decay) {
+    const ctx = this.ctx, sr = ctx.sampleRate, len = Math.floor(sr * dur);
+    const buf = ctx.createBuffer(2, len, sr);
+    for (let c = 0; c < 2; c++) {
+      const d = buf.getChannelData(c);
+      for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay);
+    }
+    return buf;
+  },
+  makeNoise(dur) {
+    const ctx = this.ctx, sr = ctx.sampleRate, len = Math.floor(sr * dur);
+    const buf = ctx.createBuffer(1, len, sr);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    return buf;
+  },
+
+  _env(node, t, peak, attack, dur) {
+    const g = node.gain;
+    g.setValueAtTime(0.0001, t);
+    g.linearRampToValueAtTime(peak, t + attack);
+    g.exponentialRampToValueAtTime(0.0001, t + dur);
+  },
+  _toReverb(node, amount) {
+    if (!this.reverb) return;
+    const g = this.ctx.createGain(); g.gain.value = amount;
+    node.connect(g); g.connect(this.reverb);
+  },
+
+  /** 挖掘音效（节流，避免同一帧多次触发） */
+  dig(intensity) {
+    if (!this.ready) return;
+    const now = performance.now() / 1000;
+    if (now - this.lastDig < CONFIG.audio.digThrottle) return;
+    this.lastDig = now;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const amp = 0.5 * clamp(intensity || 1, 0.5, 2.2);
+
+    const src = ctx.createBufferSource();
+    src.buffer = this.noiseBuf; src.loop = true;
+    src.playbackRate.value = rand(0.85, 1.25);
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass'; bp.frequency.value = rand(150, 330); bp.Q.value = 1.1;
+    const g = ctx.createGain();
+    this._env(g, t, amp, 0.006, 0.17);
+    src.connect(bp); bp.connect(g); g.connect(this.sfxBus);
+    src.start(t); src.stop(t + 0.2);
+
+    const o = ctx.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(rand(120, 155), t);
+    o.frequency.exponentialRampToValueAtTime(42, t + 0.13);
+    const og = ctx.createGain();
+    this._env(og, t, amp * 0.75, 0.005, 0.19);
+    o.connect(og); og.connect(this.sfxBus);
+    o.start(t); o.stop(t + 0.21);
+  },
+
+  /** 购买：上行两音符方波琶音 */
+  buy() {
+    if (!this.ready) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    [[523.25, 0], [783.99, 0.085]].forEach(function (p) {
+      const o = ctx.createOscillator(); o.type = 'square'; o.frequency.value = p[0];
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t + p[1]);
+      g.gain.linearRampToValueAtTime(0.14, t + p[1] + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + p[1] + 0.14);
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2400;
+      o.connect(lp); lp.connect(g); g.connect(Sound.sfxBus);
+      o.start(t + p[1]); o.stop(t + p[1] + 0.16);
+    });
+  },
+
+  /** 里程碑：低频轰鸣 + 长混响 */
+  milestone() {
+    if (!this.ready) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.5, t + 0.06);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 2.2);
+    g.connect(this.sfxBus);
+    this._toReverb(g, 0.7);
+
+    const o1 = ctx.createOscillator(); o1.type = 'sine';
+    o1.frequency.setValueAtTime(72, t); o1.frequency.exponentialRampToValueAtTime(30, t + 1.9);
+    const o2 = ctx.createOscillator(); o2.type = 'triangle';
+    o2.frequency.setValueAtTime(108, t); o2.frequency.exponentialRampToValueAtTime(47, t + 1.6);
+    o1.connect(g); o2.connect(g);
+    o1.start(t); o1.stop(t + 2.3); o2.start(t); o2.stop(t + 2.1);
+
+    const n = ctx.createBufferSource(); n.buffer = this.noiseBuf; n.loop = true;
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(700, t); lp.frequency.exponentialRampToValueAtTime(110, t + 1.6);
+    const ng = ctx.createGain();
+    ng.gain.setValueAtTime(0.22, t); ng.gain.exponentialRampToValueAtTime(0.0001, t + 1.8);
+    n.connect(lp); lp.connect(ng); ng.connect(this.sfxBus);
+    this._toReverb(ng, 0.5);
+    n.start(t); n.stop(t + 1.9);
+  },
+
+  /** 日志触发：不和谐高频颤音 */
+  logTone() {
+    if (!this.ready) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.15, t + 0.04);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 1.9);
+    g.connect(this.sfxBus);
+    this._toReverb(g, 0.65);
+
+    // 颤音 LFO 直接调制增益
+    const lfo = ctx.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = 6.8;
+    const lfoG = ctx.createGain(); lfoG.gain.value = 0.055;
+    lfo.connect(lfoG); lfoG.connect(g.gain);
+    lfo.start(t); lfo.stop(t + 2.0);
+
+    [1180, 1249, 1323].forEach(function (f) {   // 半音堆叠 → 不协和
+      const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.value = f;
+      o.connect(g); o.start(t); o.stop(t + 2.0);
+    });
+  },
+
+  /** 界面轻点 */
+  ui() {
+    if (!this.ready) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = 880;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.06, t + 0.005);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.07);
+    o.connect(g); g.connect(this.sfxBus);
+    o.start(t); o.stop(t + 0.08);
+  },
+
+  /* ---------------- 特效专属音效 ---------------- */
+  /** 电流：锯齿波快速下扫 + 带通（钻头重构 / 钻井阵列） */
+  zap() {
+    if (!this.ready) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const o = ctx.createOscillator(); o.type = 'sawtooth';
+    o.frequency.setValueAtTime(1500, t);
+    o.frequency.exponentialRampToValueAtTime(200, t + 0.17);
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 950; bp.Q.value = 3.2;
+    const g = ctx.createGain();
+    this._env(g, t, 0.17, 0.005, 0.2);
+    o.connect(bp); bp.connect(g); g.connect(this.sfxBus);
+    this._toReverb(g, 0.25);
+    o.start(t); o.stop(t + 0.22);
+  },
+  /** 爆炸：低频噪声 + 下扫低通 + 混响（爆破班组 / 深层爆破） */
+  boom() {
+    if (!this.ready) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const n = ctx.createBufferSource(); n.buffer = this.noiseBuf; n.loop = true;
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(900, t); lp.frequency.exponentialRampToValueAtTime(70, t + 0.6);
+    const g = ctx.createGain();
+    this._env(g, t, 0.6, 0.008, 0.75);
+    n.connect(lp); lp.connect(g); g.connect(this.sfxBus);
+    this._toReverb(g, 0.55);
+    n.start(t); n.stop(t + 0.8);
+    const o = ctx.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(90, t); o.frequency.exponentialRampToValueAtTime(35, t + 0.5);
+    const og = ctx.createGain();
+    this._env(og, t, 0.45, 0.006, 0.6);
+    o.connect(og); og.connect(this.sfxBus);
+    o.start(t); o.stop(t + 0.65);
+  },
+  /** 清脆三音上行（市场合约 / 成就） */
+  chime() {
+    if (!this.ready) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    [523.25, 659.25, 987.77].forEach(function (f, i) {
+      const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = f;
+      const g = ctx.createGain();
+      const off = i * 0.07;
+      g.gain.setValueAtTime(0.0001, t + off);
+      g.gain.linearRampToValueAtTime(0.13, t + off + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + off + 0.5);
+      o.connect(g); g.connect(Sound.sfxBus);
+      Sound._toReverb(g, 0.4);
+      o.start(t + off); o.stop(t + off + 0.55);
+    });
+  },
+  /** 蒸汽：高通噪声短促（气动钻机 / 地热） */
+  steam() {
+    if (!this.ready) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const n = ctx.createBufferSource(); n.buffer = this.noiseBuf; n.loop = true;
+    const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 1700;
+    const g = ctx.createGain();
+    this._env(g, t, 0.2, 0.02, 0.42);
+    n.connect(hp); hp.connect(g); g.connect(this.sfxBus);
+    n.start(t); n.stop(t + 0.45);
+  },
+  /** 高频铃声 + 长混响（选矿厂 / 共振发生器） */
+  shimmer() {
+    if (!this.ready) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    [1568, 2093, 3136].forEach(function (f, i) {
+      const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = f;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(0.09 - i * 0.02, t + 0.015);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 1.3);
+      o.connect(g); g.connect(Sound.sfxBus);
+      Sound._toReverb(g, 0.7);
+      o.start(t); o.stop(t + 1.4);
+    });
+  },
+
+  /* ---------------- BGM：程序化氛围音乐 ---------------- */
+  startBGM() {
+    if (!this.ready || this.bgmOn) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    this.bgmOn = true;
+    const base = CONFIG.audio.bgmBaseFreq;
+    // 三个略微失谐的正弦 / 三角波：基频 + 微失谐 + 五度
+    const specs = [[base, 'sine', 0.42], [base * 1.006, 'sine', 0.20], [base * 1.498, 'triangle', 0.13]];
+    this.drone = specs.map(function (sp) {
+      const o = ctx.createOscillator(); o.type = sp[1]; o.frequency.value = sp[0];
+      const g = ctx.createGain(); g.gain.value = 0.0001;
+      g.gain.linearRampToValueAtTime(sp[2], t + 3.0);
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 420;
+      o.connect(g); g.connect(lp); lp.connect(Sound.bgmBus);
+      o.start(t);
+      return { osc:o, gain:g, lp:lp, mult:sp[0] / base };
+    });
+    // 风声层
+    const n = ctx.createBufferSource(); n.buffer = this.noiseBuf; n.loop = true;
+    const nf = ctx.createBiquadFilter(); nf.type = 'lowpass'; nf.frequency.value = 240;
+    const ng = ctx.createGain(); ng.gain.value = 0.0001;
+    ng.gain.linearRampToValueAtTime(0.07, t + 4.0);
+    n.connect(nf); nf.connect(ng); ng.connect(this.bgmBus);
+    n.start(t);
+    this.wind = { src:n, gain:ng };
+
+    this.updateBGM(S.depth);
+    this._scheduleNote();
+  },
+
+  stopBGM() {
+    if (!this.bgmOn) return;
+    this.bgmOn = false;
+    if (this.bgmTimer) { clearTimeout(this.bgmTimer); this.bgmTimer = null; }
+    const t = this.ctx.currentTime;
+    this.drone.forEach(function (d) {
+      d.gain.gain.cancelScheduledValues(t);
+      d.gain.gain.setValueAtTime(d.gain.gain.value, t);
+      d.gain.gain.linearRampToValueAtTime(0.0001, t + 0.6);
+      try { d.osc.stop(t + 0.7); } catch (e) {}
+    });
+    this.drone = [];
+    if (this.wind) {
+      this.wind.gain.gain.cancelScheduledValues(t);
+      this.wind.gain.gain.setValueAtTime(this.wind.gain.gain.value, t);
+      this.wind.gain.gain.linearRampToValueAtTime(0.0001, t + 0.6);
+      try { this.wind.src.stop(t + 0.7); } catch (e) {}
+      this.wind = null;
+    }
+  },
+
+  _scheduleNote() {
+    const self = this;
+    const gap = rand(CONFIG.audio.bgmNoteGap[0], CONFIG.audio.bgmNoteGap[1]);
+    this.bgmTimer = setTimeout(function () {
+      if (!self.bgmOn) return;
+      self.playNote();
+      self._scheduleNote();
+    }, gap * 1000);
+  },
+
+  /** 五声音阶随机音符；深度越大音高越低、不协和音越多 */
+  playNote() {
+    if (!this.ready) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const deep = clamp(S.depth / 12000, 0, 1);
+    const base = 220 * Math.pow(0.5, deep * 1.35);          // 深度 → 音高下降
+    const scale = [0, 3, 5, 7, 10];                          // 小调五声音阶
+    const semis = scale[randInt(0, scale.length - 1)] + (Math.random() < 0.35 ? 12 : 0);
+    const f = base * Math.pow(2, semis / 12);
+
+    const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = f;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.16, t + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 1.8);
+    o.connect(g); g.connect(this.bgmBus);
+    this._toReverb(g, 0.45);
+    o.start(t); o.stop(t + 1.9);
+
+    // 4000m 以下随机叠加不协和半音
+    if (S.depth > 4000 && Math.random() < 0.15 + deep * 0.35) {
+      const o2 = ctx.createOscillator(); o2.type = 'triangle';
+      o2.frequency.value = f * 1.0595;
+      const g2 = ctx.createGain();
+      g2.gain.setValueAtTime(0.0001, t);
+      g2.gain.linearRampToValueAtTime(0.07, t + 0.05);
+      g2.gain.exponentialRampToValueAtTime(0.0001, t + 1.4);
+      o2.connect(g2); g2.connect(this.bgmBus);
+      this._toReverb(g2, 0.4);
+      o2.start(t); o2.stop(t + 1.5);
+    }
+  },
+
+  /** 随深度推进 drone 音高与音色（每 2 秒调用一次即可） */
+  updateBGM(depth) {
+    if (!this.bgmOn || !this.ready) return;
+    const deep = clamp(depth / 12000, 0, 1);
+    const f = CONFIG.audio.bgmBaseFreq * Math.pow(0.52, deep);
+    const t = this.ctx.currentTime;
+    this.drone.forEach(function (d) {
+      d.osc.frequency.setTargetAtTime(f * d.mult, t, 1.2);
+    });
+    if (this.wind) this.wind.gain.gain.setTargetAtTime(0.05 + deep * 0.07, t, 2.0);
+  },
+
+  /* ---------------- 音量 / 静音 / 挂起 ---------------- */
+  setVolumes() {
+    if (!this.ready) return;
+    this.sfxBus.gain.setTargetAtTime(S.settings.sfx, this.ctx.currentTime, 0.05);
+    this.bgmBus.gain.setTargetAtTime(S.settings.bgm * 0.75, this.ctx.currentTime, 0.05);
+    this.master.gain.setTargetAtTime(S.settings.muted ? 0 : 1, this.ctx.currentTime, 0.05);
+  },
+  suspend() { if (this.ctx && this.ctx.state === 'running') { try { this.ctx.suspend(); } catch (e) {} } },
+  resume()  { if (this.ctx && this.ctx.state === 'suspended') { try { this.ctx.resume(); } catch (e) {} } }
+};
+
+/* ==========================================================================
+ * §5  存档系统（localStorage + base64 导入导出）
+ * ========================================================================== */
+function defaultState() {
+  return {
+    depth:0, maxDepth:0, coins:0, ore:0, totalCoins:0, totalOre:0,
+    b:{}, u:{},                     // 建筑数量 / 升级等级
+    cores:0, prestige:0, prodMult:1, // 岩芯 / 转生次数 / 日志奖励的永久产能倍率
+    logs:[], ach:{},                // 已解锁日志 id / 成就
+    autosell:false,
+    layerIdx:0,
+    balanceVersion: CONFIG.balanceVersion,
+    stats:{ clicks:0, playTime:0, lastSave:Date.now(), born:Date.now() },
+    settings:{ sfx:CONFIG.audio.sfxVolume, bgm:CONFIG.audio.bgmVolume, muted:CONFIG.audio.muted, quality:'mid', fx:true, audioVersion:CONFIG.audio.audioVersion }
+  };
+}
+let S = defaultState();
+
+function num(v, d) { return (typeof v === 'number' && isFinite(v)) ? v : d; }
+
+function applySave(d) {
+  if (!d || typeof d !== 'object') return false;
+  const base = defaultState();
+  S = base;
+  ['depth','maxDepth','coins','ore','totalCoins','totalOre','cores','prestige','prodMult']
+    .forEach(function (k) { S[k] = num(d[k], base[k]); });
+  S.autosell   = !!d.autosell;
+  S.layerIdx   = num(d.layerIdx, 0) | 0;
+  S.b          = Object.assign({}, d.b || {});
+  S.u          = Object.assign({}, d.u || {});
+  S.ach        = Object.assign({}, d.ach || {});
+  S.stats      = Object.assign(base.stats, d.stats || {});
+  S.settings   = Object.assign(base.settings, d.settings || {});
+  S.logs       = Array.isArray(d.logs) ? d.logs.filter(function (x) { return typeof x === 'string'; }) : [];
+  if (S.prodMult < 1) S.prodMult = 1;
+  if (S.depth < 0) S.depth = 0;
+  if (S.maxDepth < S.depth) S.maxDepth = S.depth;
+
+  // 音量默认值版本不一致：把音量迁移到新的默认值（不影响其他设置）
+  // 注意 audioVersion 存在 settings 里，必须读 d.settings.audioVersion
+  if (num((d.settings && d.settings.audioVersion), 1) !== CONFIG.audio.audioVersion) {
+    S.settings.sfx = CONFIG.audio.sfxVolume;
+    S.settings.bgm = CONFIG.audio.bgmVolume;
+  }
+  S.settings.audioVersion = CONFIG.audio.audioVersion;
+
+  // 数值版本不一致：保留收藏类进度，重置经济部分
+  if (num(d.balanceVersion, 1) !== CONFIG.balanceVersion) {
+    const keep = {
+      logs: S.logs, ach: S.ach, prestige: S.prestige, cores: S.cores,
+      prodMult: S.prodMult, settings: S.settings, stats: S.stats
+    };
+    S = defaultState();
+    S.logs = keep.logs; S.ach = keep.ach; S.prestige = keep.prestige; S.cores = keep.cores;
+    S.prodMult = keep.prodMult; S.settings = keep.settings; S.stats = keep.stats;
+    S.migrated = true;
+  }
+  return true;
+}
+
+function loadGame() {
+  try {
+    const raw = localStorage.getItem(CONFIG.saveKey);
+    if (!raw) return false;
+    return applySave(JSON.parse(raw));
+  } catch (e) { console.warn('[ABYSS] 存档读取失败：', e); return false; }
+}
+function saveGame() {
+  try {
+    S.stats.lastSave = Date.now();
+    localStorage.setItem(CONFIG.saveKey, JSON.stringify(S));
+    return true;
+  } catch (e) { console.warn('[ABYSS] 存档写入失败：', e); return false; }
+}
+function exportSave() {
+  try {
+    const json = JSON.stringify(S);
+    return btoa(unescape(encodeURIComponent(json)));
+  } catch (e) { return ''; }
+}
+function importSave(text) {
+  try {
+    const json = decodeURIComponent(escape(atob(String(text).trim())));
+    const ok = applySave(JSON.parse(json));
+    if (ok) { recalc(); refreshAllUI(); saveGame(); }
+    return ok;
+  } catch (e) { return false; }
+}
+function hardReset() {
+  S = defaultState();
+  try { localStorage.removeItem(CONFIG.saveKey); } catch (e) {}
+  recalc(); refreshAllUI();
+}
+
+/* 自动保存 */
+let autosaveTimer = 0;
+function tickAutosave(dt) {
+  autosaveTimer += dt;
+  if (autosaveTimer >= CONFIG.autosaveInterval) { autosaveTimer = 0; saveGame(); }
+}
+
+/* ==========================================================================
+ * §6  经济系统
+ * ========================================================================== */
+
+/** 派生数值缓存（每帧重算，避免在 UI 中重复计算） */
+const D = {
+  layerIdx:0, layer:LAYERS[0], res:1,
+  rawDps:0, speedMult:1, oreMult:1, priceMult:1,
+  dps:0, ops:0, cps:0, unitPrice:1,
+  clickPow:1, clickDepth:1
+};
+
+function layerIndex(depth) {
+  let idx = 0;
+  for (let i = 0; i < LAYERS.length; i++) if (depth >= LAYERS[i].from) idx = i;
+  return idx;
+}
+/** 深度推进阻力（节奏墙） */
+function resistance(depth) { return Math.pow(CONFIG.depth.resistanceBase, depth); }
+
+function recalc() {
+  const li = layerIndex(S.depth);
+  const lay = LAYERS[li];
+  D.layerIdx = li;
+  D.layer    = lay;
+  D.res      = resistance(S.depth);
+
+  let dpsAdd = 0, oreAdd = 0, priceAdd = 0, raw = 0;
+  for (let i = 0; i < BUILDINGS.length; i++) {
+    const b = BUILDINGS[i], n = S.b[b.id] || 0;
+    if (!n) continue;
+    if (b.dpsAdd)   dpsAdd   += b.dpsAdd * n;
+    if (b.oreAdd)   oreAdd   += b.oreAdd * n;
+    if (b.priceAdd) priceAdd += b.priceAdd * n;
+    if (b.dps)      raw      += b.dps * n;
+  }
+  for (let i = 0; i < UPGRADES.length; i++) {
+    const u = UPGRADES[i], n = S.u[u.id] || 0;
+    if (!n) continue;
+    if (u.kind === 'oreAdd')        oreAdd   += u.per * n;
+    else if (u.kind === 'priceAdd') priceAdd += u.per * n;
+    else if (u.kind === 'speedAdd') dpsAdd   += u.per * n;
+  }
+
+  const coreSpeed = 1 + CONFIG.prestige.speedPerCore * S.cores;
+  const corePrice = 1 + CONFIG.prestige.pricePerCore * S.cores;
+
+  D.speedMult = (1 + dpsAdd) * coreSpeed * S.prodMult;   // 挖掘速度倍率
+  D.oreMult   = (1 + oreAdd) * lay.oreCoeff;             // 每米矿石倍率
+  D.priceMult = (1 + priceAdd) * corePrice * S.prodMult; // 矿石售价倍率
+  D.rawDps    = raw;
+  D.dps       = raw * D.speedMult / D.res;               // 有效 米/秒
+  D.ops       = D.dps * CONFIG.click.orePerMeter * D.oreMult;
+  D.unitPrice = lay.price * (1 + S.depth / CONFIG.depth.priceDepthScale) * D.priceMult * CONFIG.sellRatio;
+  D.cps       = D.ops * D.unitPrice;                     // 自动出售时的 金币/秒
+
+  const lv = S.u.drill || 0;
+  D.clickPow   = CONFIG.click.baseDepth * Math.pow(1.6, lv) * D.speedMult * lay.clickCoeff;
+  D.clickDepth = D.clickPow / D.res;
+}
+
+/* ---------------- 成本与购买 ---------------- */
+/** 建筑：一次购买 n 个的总价（等比级数求和） */
+function buildingCost(b, n) {
+  const own = S.b[b.id] || 0, r = CONFIG.costGrowth;
+  return b.baseCost * Math.pow(r, own) * (Math.pow(r, n) - 1) / (r - 1);
+}
+function buildingMax(b) {
+  const own = S.b[b.id] || 0, r = CONFIG.costGrowth;
+  const c0 = b.baseCost * Math.pow(r, own);
+  if (S.coins < c0) return 0;
+  const n = Math.floor(Math.log(S.coins * (r - 1) / c0 + 1) / Math.log(r));
+  return clamp(isFinite(n) ? n : 0, 0, 1000);
+}
+function upgradeCost(u, n) {
+  const lv = S.u[u.id] || 0, r = u.costMul;
+  return u.baseCost * Math.pow(r, lv) * (Math.pow(r, n) - 1) / (r - 1);
+}
+function upgradeMax(u) {
+  const lv = S.u[u.id] || 0, r = u.costMul;
+  const c0 = u.baseCost * Math.pow(r, lv);
+  if (S.coins < c0) return 0;
+  const n = Math.floor(Math.log(S.coins * (r - 1) / c0 + 1) / Math.log(r));
+  return clamp(isFinite(n) ? n : 0, 0, 1000);
+}
+
+function buyBuilding(b, n) {
+  if (!isUnlockedBuilding(b)) return false;
+  if (n === 'max') n = buildingMax(b);
+  n = n | 0;
+  if (n <= 0) return false;
+  const cost = buildingCost(b, n);
+  if (S.coins < cost) return false;
+  S.coins -= cost;
+  S.b[b.id] = (S.b[b.id] || 0) + n;
+  recalc();
+  FX.play(b.id, S.b[b.id]);          // 每种建筑一套专属特效 + 音效
+  return true;
+}
+function buyUpgrade(u, n) {
+  if (n === 'max') n = upgradeMax(u);
+  n = n | 0;
+  if (n <= 0) return false;
+  const cost = upgradeCost(u, n);
+  if (S.coins < cost) return false;
+  S.coins -= cost;
+  S.u[u.id] = (S.u[u.id] || 0) + n;
+  recalc();
+  FX.play(u.id, S.u[u.id]);          // 每种升级一套专属特效 + 音效
+  return true;
+}
+function isUnlockedBuilding(b) {
+  if (S.maxDepth < b.unlock) return false;
+  if (b.needPrestige && S.prestige < b.needPrestige) return false;
+  return true;
+}
+
+/* ---------------- 推进 ---------------- */
+function advance(depthGain) {
+  if (!isFinite(depthGain) || depthGain <= 0) return 0;
+  S.depth += depthGain;
+  if (S.depth > S.maxDepth) S.maxDepth = S.depth;
+  const ore = depthGain * CONFIG.click.orePerMeter * D.oreMult;
+  S.totalOre += ore;
+  if (S.autosell) {
+    const c = ore * D.unitPrice;
+    S.coins += c; S.totalCoins += c;
+  } else {
+    S.ore += ore;
+  }
+  return depthGain;
+}
+
+let autoEmitTimer = 0;
+function tick(dt) {
+  recalc();
+  if (D.dps > 0) {
+    advance(D.dps * dt);
+    autoEmitTimer += dt;
+    if (autoEmitTimer > 0.14) {
+      autoEmitTimer = 0;
+      const n = clamp(Math.round(D.dps * 0.06), 1, 6);
+      Scene.emitDebris(n, 0.7);
+    }
+  }
+  checkLayer();
+  checkLogs();
+  S.stats.playTime += dt;
+}
+
+/* ---------------- 挖掘（点击） ---------------- */
+function dig(x, y) {
+  recalc();
+  let gain = D.clickDepth;
+  let crit = false;
+  if (Math.random() < CONFIG.click.critChance) { crit = true; gain *= CONFIG.click.critMult; }
+  advance(gain);
+  S.stats.clicks++;
+
+  Sound.dig(crit ? 1.8 : 1);
+  Scene.punchDrill(crit ? 2.2 : 1);
+  Scene.emitDebris(crit ? 22 : 10, crit ? 1.6 : 1);
+
+  floater((crit ? '暴击 +' : '+') + fmtDepth(gain) + 'm', x, y, crit ? 'crit' : '');
+  if (!S.autosell && Math.random() < 0.5) {
+    floater('+' + fmt(gain * D.oreMult) + ' 矿石', x, y, 'ore');
+  }
+  checkLayer();
+  checkLogs();
+  checkAchievements();
+}
+
+function sellOre() {
+  if (S.ore <= 0) return 0;
+  const c = S.ore * D.unitPrice;
+  S.coins += c; S.totalCoins += c;
+  S.ore = 0;
+  Sound.buy();
+  return c;
+}
+
+/* ---------------- 矿层里程碑 ---------------- */
+function checkLayer() {
+  const li = layerIndex(S.depth);
+  if (li !== S.layerIdx) {
+    const prev = S.layerIdx;
+    S.layerIdx = li;
+    const lay = LAYERS[li];
+    Scene.onLayerChange(li, li > prev);
+    Sound.milestone();
+    FX.play('layer');
+    shakeScreen(li > prev ? 1 : 0.5);
+    applyTheme(li);
+    toast('进入「' + lay.name + '」　矿石单价 ×' + fmt(lay.price), 'cyan');
+    floater('新矿层：' + lay.name, window.innerWidth / 2, window.innerHeight * 0.22, '');
+  }
+}
+
+/* ---------------- 日志触发 ---------------- */
+const logQueue = [];
+function hasLog(id) { return S.logs.indexOf(id) >= 0; }
+function checkLogs() {
+  for (let i = 0; i < LOGS.length; i++) {
+    const L = LOGS[i];
+    if (S.depth >= L.depth && !hasLog(L.id)) {
+      S.logs.push(L.id);
+      grantReward(L);
+      logQueue.push(L);
+    }
+  }
+  if (logQueue.length && !UI.modalOpen) showLogModal(logQueue.shift());
+}
+function grantReward(L) {
+  if (L.reward === 'coins') {
+    // 金币爆发 = 当前秒产出 × rewardCoinSeconds（下限 300）。
+    // 注意：不要用「深度 × 单价」之类随深度线性/阶跃增长的保底项，
+    // 否则后期单次奖励会远大于玩家总资产，引发连锁爆发、瞬间穿越多个矿层。
+    const amt = Math.max(D.cps * CONFIG.narrative.rewardCoinSeconds, 300);
+    S.coins += amt; S.totalCoins += amt;
+    toast('档案奖励：金币 +' + fmt(amt));
+  } else {
+    S.prodMult *= (1 + CONFIG.narrative.rewardProdPct);
+    toast('档案奖励：永久产能 +5%（累计 ×' + S.prodMult.toFixed(2) + '）', 'cyan');
+  }
+}
+/** 下一条未解锁日志（用于 HUD 常驻目标） */
+function nextLogInfo() {
+  for (let i = 0; i < LOGS.length; i++) {
+    if (!hasLog(LOGS[i].id)) return { log: LOGS[i], remain: Math.max(0, LOGS[i].depth - S.depth) };
+  }
+  return null;
+}
+
+/* ---------------- 成就 ---------------- */
+function checkAchievements() {
+  for (let i = 0; i < ACHIEVEMENTS.length; i++) {
+    const a = ACHIEVEMENTS[i];
+    if (!S.ach[a.id] && a.test(S)) {
+      S.ach[a.id] = 1;
+      toast('成就达成 · ' + a.name, 'cyan');
+      Sound.buy();
+    }
+  }
+}
+
+/* ---------------- 转生（岩芯提取） ---------------- */
+function coresGain() { return Math.floor(Math.sqrt(S.maxDepth / CONFIG.prestige.corePerDepth)); }
+function canPrestige() { return S.maxDepth >= CONFIG.prestige.minDepth && coresGain() > 0; }
+function doPrestige() {
+  if (!canPrestige()) return false;
+  const gain = coresGain();
+  const keep = {
+    cores: S.cores + gain,
+    prestige: S.prestige + 1,
+    prodMult: S.prodMult,
+    logs: S.logs.slice(),
+    ach: Object.assign({}, S.ach),
+    stats: Object.assign({}, S.stats),
+    settings: Object.assign({}, S.settings)
+  };
+  S = defaultState();
+  S.cores = keep.cores; S.prestige = keep.prestige; S.prodMult = keep.prodMult;
+  S.logs = keep.logs; S.ach = keep.ach; S.stats = keep.stats; S.settings = keep.settings;
+  S.stats.lastSave = Date.now();
+  recalc();
+  applyTheme(D.layerIdx);
+  Scene.hardResetVisual();
+  refreshAllUI();
+  saveGame();
+  Sound.milestone();
+  shakeScreen(1.4);
+  return gain;
+}
+
+/* ---------------- 离线收益 ----------------
+ * 用当前派生数值做分段模拟（深度推进会改变阻力与矿层，逐段逼近更真实）
+ * 上限 CONFIG.offlineCapHours 小时
+ * ------------------------------------------------------------------ */
+function settleOffline(seconds) {
+  const sec = Math.min(Math.max(0, seconds), CONFIG.offlineCapHours * 3600);
+  if (sec < 1 || D.rawDps <= 0) return null;
+  const steps = CONFIG.offlineSteps;
+  const dt = sec / steps;
+  let d = S.depth, depthG = 0, oreG = 0, coinG = 0;
+  for (let i = 0; i < steps; i++) {
+    const g = D.rawDps * D.speedMult / resistance(d) * dt;
+    if (!isFinite(g) || g <= 0) break;
+    d += g; depthG += g;
+    const ore = g * CONFIG.click.orePerMeter * D.oreMult;
+    if (S.autosell) coinG += ore * LAYERS[layerIndex(d)].price * D.priceMult * CONFIG.sellRatio;
+    else oreG += ore;
+  }
+  if (depthG <= 0) return null;
+  S.depth += depthG;
+  if (S.depth > S.maxDepth) S.maxDepth = S.depth;
+  S.totalOre += oreG;
+  if (S.autosell) { S.coins += coinG; S.totalCoins += coinG; }
+  else S.ore += oreG;
+  recalc();
+  return { seconds: sec, capped: seconds > CONFIG.offlineCapHours * 3600, depth: depthG, ore: oreG, coins: coinG };
+}
+
+/* ==========================================================================
+ * §7  SceneWorld —— Three.js 垂直矿井场景
+ *      井壁（BackSide 圆柱 + 程序化岩层贴图） / 钻头 / 矿脉 Points /
+ *      碎石粒子对象池 / 雾 / 镜头晃动 / 深度主题
+ * ========================================================================== */
+const Scene = {
+  ok:false, canvas:null, renderer:null, scene:null, camera:null,
+  shaft:null, shaftMat:null, shaftTex:null, glowTex:null,
+  drill:null, drillGlow:null, spin:0, punch:0,
+  veins:null, veinGeo:null, veinPos:null, veinCol:null, veinPhase:[], veinBase:[],
+  deb:null, debGeo:null, debPos:null, debCol:null, debVel:null, debLife:null, debLife0:null, debBase:null,
+  debMax:0, debCursor:0, debDirty:false,
+  amb:null, dirTop:null, dirDeep:null,
+  camY:0, shake:0, time:0,
+  tintTarget:null, fogTarget:null, layerIdx:-1,
+  _c1:null, _c2:null, _tmp:null,
+
+  init(canvas) {
+    this.canvas = canvas;
+    try {
+      this.renderer = new THREE.WebGLRenderer({
+        canvas: canvas, antialias: false, alpha: false, powerPreference: 'high-performance'
+      });
+    } catch (e) {
+      console.warn('[ABYSS] WebGL 初始化失败：', e);
+      this.ok = false;
+      return false;
+    }
+    const cap = S.settings.quality === 'low' ? 1.25 : (S.settings.quality === 'high' ? 2 : 1.6);
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, cap));
+    this.renderer.setClearColor(0x05060a, 1);
+    if ('outputColorSpace' in this.renderer && THREE.SRGBColorSpace) {
+      this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    }
+
+    this.scene = new THREE.Scene();
+    this.scene.fog = new THREE.FogExp2(0x0a0806, CONFIG.fx.fogBase);
+
+    this.camera = new THREE.PerspectiveCamera(64, 1, 0.1, 400);
+    this.scene.add(this.camera);
+
+    this._c1 = new THREE.Color(); this._c2 = new THREE.Color(); this._tmp = new THREE.Color();
+    this.tintTarget = new THREE.Color(LAYERS[0].color);
+    this.fogTarget  = new THREE.Color(LAYERS[0].fog);
+
+    /* ---- 灯光：只用环境光 / 平行光，避免不同 three 版本点光源强度差异 ---- */
+    this.amb = new THREE.AmbientLight(0x36414d, 1.0);
+    this.scene.add(this.amb);
+    this.dirTop = new THREE.DirectionalLight(0xffd7a8, 1.25);
+    this.dirTop.position.set(0, 40, 8);
+    this.scene.add(this.dirTop);
+    this.dirDeep = new THREE.DirectionalLight(0x2ad0c8, 0.30);
+    this.dirDeep.position.set(0, -40, 0);
+    this.scene.add(this.dirDeep);
+
+    /* ---- 程序化贴图 ---- */
+    this.glowTex  = makeGlowTexture();
+    this.shaftTex = makeRockTexture();
+    this.shaftTex.repeat.set(3, CONFIG.fx.textureRepeatY);
+
+    /* ---- 井壁 ---- */
+    const H = CONFIG.fx.shaftHeight, R = CONFIG.fx.shaftRadius;
+    const shaftGeo = new THREE.CylinderGeometry(R, R, H, 44, 1, true);
+    this.shaftMat = new THREE.MeshLambertMaterial({
+      map: this.shaftTex, side: THREE.BackSide, color: new THREE.Color(LAYERS[0].color)
+    });
+    this.shaft = new THREE.Mesh(shaftGeo, this.shaftMat);
+    this.scene.add(this.shaft);
+
+    /* ---- 钻头 ---- */
+    this.drill = buildDrill();
+    this.scene.add(this.drill);
+    this.drillGlow = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: this.glowTex, color: 0xffa63a, transparent: true,
+      blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.75
+    }));
+    this.drillGlow.scale.set(8, 8, 1);
+    this.scene.add(this.drillGlow);
+
+    /* ---- 矿脉点 ---- */
+    this.initVeins();
+    /* ---- 碎石粒子池 ---- */
+    this.setQuality(S.settings.quality || 'mid');
+
+    this.camY = this.targetCamY();
+    this.resize();
+    this.ok = true;
+    return true;
+  },
+
+  /* ---------------- 矿脉（井壁发光点，按深度着色，随镜头循环复用） ---------------- */
+  initVeins() {
+    const N = CONFIG.fx.veinCount;
+    const H = CONFIG.fx.shaftHeight;
+    const R = CONFIG.fx.shaftRadius * 0.94;
+    const pos = new Float32Array(N * 3);
+    const col = new Float32Array(N * 3);
+    this.veinPhase  = new Float32Array(N);
+    this.veinBright = new Float32Array(N);
+    this.veinBase   = new Float32Array(N * 3);
+    for (let i = 0; i < N; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = R * rand(0.82, 1.0);
+      pos[i * 3]     = Math.cos(a) * r;
+      pos[i * 3 + 1] = rand(-H / 2, H / 2);
+      pos[i * 3 + 2] = Math.sin(a) * r;
+      this.veinPhase[i]  = Math.random() * Math.PI * 2;
+      this.veinBright[i] = rand(0.7, 1.3);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    const mat = new THREE.PointsMaterial({
+      size: 0.55, map: this.glowTex, vertexColors: true, transparent: true,
+      depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true, opacity: 0.95
+    });
+    this.veins = new THREE.Points(geo, mat);
+    this.veins.frustumCulled = false;
+    this.veinGeo = geo; this.veinPos = pos; this.veinCol = col;
+    this.scene.add(this.veins);
+    this.refreshVeinColors(true);
+  },
+
+  /** 按每个点的绝对深度重新着色 */
+  refreshVeinColors(force) {
+    if (!this.veins) return;
+    const N = CONFIG.fx.veinCount, H = CONFIG.fx.shaftHeight;
+    const camY = this.camY, W = CONFIG.depth.worldPerMeter;
+    const pos = this.veinPos, col = this.veinCol, base = this.veinBase;
+    let dirty = false;
+    for (let i = 0; i < N; i++) {
+      const y = pos[i * 3 + 1];
+      // 循环复用：越过可视段就搬到另一端
+      let yy = y;
+      if (yy > camY + H / 2) { yy -= H; dirty = true; }
+      else if (yy < camY - H / 2) { yy += H; dirty = true; }
+      if (dirty) pos[i * 3 + 1] = yy;
+      if (!force && !dirty && !this.deep) continue;
+      const depthM = Math.max(0, -yy / W);
+      const li = layerIndex(depthM);
+      this._tmp.setHex(LAYERS[li].color);
+      // 深部：闪烁频率异常（压迫感）
+      let k = this.veinBright[i];
+      if (this.deep > 0) {
+        const f = 2 + this.deep * 9;
+        k *= 0.45 + 0.55 * Math.abs(Math.sin(this.time * f + this.veinPhase[i]));
+      }
+      const r = this._tmp.r * k, g = this._tmp.g * k, b = this._tmp.b * k;
+      col[i * 3] = r; col[i * 3 + 1] = g; col[i * 3 + 2] = b;
+      base[i * 3] = r; base[i * 3 + 1] = g; base[i * 3 + 2] = b;
+    }
+    if (dirty) this.veinGeo.attributes.position.needsUpdate = true;
+    this.veinGeo.attributes.color.needsUpdate = true;
+  },
+
+  /* ---------------- 碎石粒子池 ---------------- */
+  setQuality(level) {
+    let max = CONFIG.fx.quality[level] || CONFIG.fx.quality.mid;
+    max = Math.min(max, CONFIG.fx.maxParticles);
+    if (this.deb) { this.scene.remove(this.deb); this.debGeo.dispose(); this.deb.material.dispose(); }
+    const pos = new Float32Array(max * 3);
+    const col = new Float32Array(max * 3);
+    for (let i = 0; i < max; i++) { pos[i * 3 + 1] = 1e6; }   // 死亡粒子停放在远方
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    const mat = new THREE.PointsMaterial({
+      size: 0.42, map: this.glowTex, vertexColors: true, transparent: true,
+      depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true
+    });
+    const pts = new THREE.Points(geo, mat);
+    pts.frustumCulled = false;
+    this.deb = pts; this.debGeo = geo; this.debPos = pos; this.debCol = col;
+    this.debVel   = new Float32Array(max * 3);
+    this.debLife  = new Float32Array(max);
+    this.debLife0 = new Float32Array(max);
+    this.debBase  = new Float32Array(max * 3);
+    this.debGrav  = new Float32Array(max);
+    this.debDrag  = new Float32Array(max);
+    this.debMode  = new Uint8Array(max);
+    this.debMax = max; this.debCursor = 0;
+    this.scene.add(pts);
+  },
+
+  /** 挖掘碎石（兼容旧调用） */
+  emitDebris(n, power) {
+    this.emit('burst', n, (D.layer ? D.layer.color : LAYERS[0].color), power || 1);
+  },
+
+  /**
+   * 通用粒子发射。不同特效用不同 mode 区分运动形态：
+   *   burst  径向喷射 + 重力（碎石）
+   *   jet    向上喷射、负重力（蒸汽 / 等离子 / 地热）
+   *   spiral 螺旋上升（钻头重构 / 共振）
+   *   rain   从上方落下（金币雨）
+   *   spark  高速短命火花（声呐 / 电流）
+   */
+  emit(mode, n, colorHex, power) {
+    if (!this.ok || !this.deb) return;
+    const p = power || 1;
+    const y0 = this.drillY() - 1.2;
+    this._tmp.setHex((colorHex === undefined || colorHex === null)
+      ? (D.layer ? D.layer.color : LAYERS[0].color) : colorHex);
+    const cnt = Math.min(Math.round(n) || 0, this.debMax);
+    for (let k = 0; k < cnt; k++) {
+      const i = this.debCursor;
+      this.debCursor = (this.debCursor + 1) % this.debMax;      // 超出上限后复用最老的
+      const a = Math.random() * Math.PI * 2;
+      const r = rand(0.3, 1.6);
+      const i3 = i * 3;
+      let px, py, pz, vx, vy, vz, grav = 15.5, drag = 1.15, life = rand(0.55, 1.35);
+
+      if (mode === 'jet') {
+        px = Math.cos(a) * r * 0.7; pz = Math.sin(a) * r * 0.7; py = y0 - rand(0, 1.0);
+        vx = Math.cos(a) * rand(0.5, 2.0) * p; vy = rand(5, 12) * p; vz = Math.sin(a) * rand(0.5, 2.0) * p;
+        grav = -2.2; drag = 0.55; life = rand(0.7, 1.5);
+      } else if (mode === 'spiral') {
+        px = Math.cos(a) * r; pz = Math.sin(a) * r; py = y0 - rand(0, 1.4);
+        vx = Math.cos(a) * rand(1.2, 3.0) * p - Math.sin(a) * 3.4;
+        vy = rand(3.5, 8) * p;
+        vz = Math.sin(a) * rand(1.2, 3.0) * p + Math.cos(a) * 3.4;
+        grav = -1.2; drag = 0.5; life = rand(0.9, 1.7);
+      } else if (mode === 'rain') {
+        px = rand(-3.6, 3.6); pz = rand(-3.6, 3.6); py = this.camY + rand(8, 20);
+        vx = rand(-0.6, 0.6); vy = -rand(3, 7) * p; vz = rand(-0.6, 0.6);
+        grav = 7.5; drag = 0.25; life = rand(0.9, 1.7);
+      } else if (mode === 'spark') {
+        px = Math.cos(a) * r * 0.8; pz = Math.sin(a) * r * 0.8; py = y0 - rand(0, 1.6);
+        vx = Math.cos(a) * rand(3, 9) * p; vy = rand(2, 8) * p; vz = Math.sin(a) * rand(3, 9) * p;
+        grav = 13; drag = 1.9; life = rand(0.25, 0.6);
+      } else { // burst
+        px = Math.cos(a) * r; pz = Math.sin(a) * r; py = y0 - rand(0, 1.4);
+        vx = Math.cos(a) * rand(1.2, 5.2) * p; vy = rand(1.5, 7.5) * p; vz = Math.sin(a) * rand(1.2, 5.2) * p;
+        grav = 15.5; drag = 1.15; life = rand(0.55, 1.35);
+      }
+
+      this.debPos[i3] = px; this.debPos[i3 + 1] = py; this.debPos[i3 + 2] = pz;
+      this.debVel[i3] = vx; this.debVel[i3 + 1] = vy; this.debVel[i3 + 2] = vz;
+      this.debLife[i] = life; this.debLife0[i] = life;
+      this.debGrav[i] = grav; this.debDrag[i] = drag;
+
+      // 颜色：矿层色 / 指定色 + 琥珀火花
+      const spark = (mode === 'spark') || Math.random() < 0.45;
+      const cr = spark ? 1.0 : this._tmp.r * rand(0.8, 1.3);
+      const cg = spark ? rand(0.55, 0.78) : this._tmp.g * rand(0.8, 1.3);
+      const cb = spark ? rand(0.15, 0.35) : this._tmp.b * rand(0.8, 1.3);
+      this.debBase[i3] = cr; this.debBase[i3 + 1] = cg; this.debBase[i3 + 2] = cb;
+      this.debCol[i3] = cr; this.debCol[i3 + 1] = cg; this.debCol[i3 + 2] = cb;
+    }
+    this.debDirty = true;
+  },
+
+  updateDebris(dt) {
+    if (!this.deb) return;
+    const pos = this.debPos, col = this.debCol, vel = this.debVel;
+    const life = this.debLife, life0 = this.debLife0, base = this.debBase;
+    const grav = this.debGrav, dragArr = this.debDrag;
+    let any = false;
+    for (let i = 0; i < this.debMax; i++) {
+      if (life[i] <= 0) continue;
+      any = true;
+      life[i] -= dt;
+      const i3 = i * 3;
+      if (life[i] <= 0) {                       // 回收：置黑（加法混合下不可见）+ 停放远处
+        col[i3] = 0; col[i3 + 1] = 0; col[i3 + 2] = 0;
+        pos[i3 + 1] = 1e6;
+        continue;
+      }
+      pos[i3]     += vel[i3] * dt;
+      pos[i3 + 1] += vel[i3 + 1] * dt;
+      pos[i3 + 2] += vel[i3 + 2] * dt;
+      vel[i3 + 1] -= grav[i] * dt;              // 每种特效可有不同重力（负 = 上浮）
+      const drag = Math.max(0, 1 - dragArr[i] * dt);
+      vel[i3] *= drag; vel[i3 + 1] *= drag; vel[i3 + 2] *= drag;
+      const k = life[i] / life0[i];             // 生命衰减 → 亮度衰减
+      col[i3] = base[i3] * k; col[i3 + 1] = base[i3 + 1] * k; col[i3 + 2] = base[i3 + 2] * k;
+    }
+    if (any || this.debDirty) {
+      this.debGeo.attributes.position.needsUpdate = true;
+      this.debGeo.attributes.color.needsUpdate = true;
+      this.debDirty = false;
+    }
+  },
+
+  /* ---------------- 位置与镜头 ---------------- */
+  targetCamY() { return -S.depth * CONFIG.depth.worldPerMeter; },
+  drillY() { return this.camY - 6.2; },
+
+  punchDrill(power) { this.punch = Math.min(3.2, this.punch + (power || 1)); },
+
+  onLayerChange(idx) {
+    this.layerIdx = idx;
+    this.tintTarget = new THREE.Color(LAYERS[idx].color);
+    this.fogTarget  = new THREE.Color(LAYERS[idx].fog);
+    this.shake = Math.max(this.shake, 0.85);
+  },
+
+  hardResetVisual() {
+    this.camY = this.targetCamY();
+    this.shake = 0; this.punch = 0;
+    if (this.deb) {
+      for (let i = 0; i < this.debMax; i++) {
+        this.debLife[i] = 0;
+        this.debPos[i * 3 + 1] = 1e6;
+        this.debCol[i * 3] = this.debCol[i * 3 + 1] = this.debCol[i * 3 + 2] = 0;
+      }
+      this.debDirty = true;
+    }
+    this.refreshVeinColors(true);
+    if (this.shaftMat) this.shaftMat.color.setHex(LAYERS[layerIndex(S.depth)].color);
+  },
+
+  update(dt) {
+    if (!this.ok) return;
+    this.time += dt;
+
+    // 镜头跟随深度（大跳动时直接吸附，避免长距离缓动）
+    const target = this.targetCamY();
+    if (Math.abs(target - this.camY) > 4) this.camY = target;
+    else this.camY = lerp(this.camY, target, Math.min(1, dt * 9));
+
+    // 井壁跟随镜头 + 贴图锁定世界坐标（形成持续下坠感）
+    this.shaft.position.y = this.camY;
+    this.shaftTex.offset.y = (this.camY / CONFIG.fx.shaftHeight) * CONFIG.fx.textureRepeatY;
+
+    // 矿层色渐变过渡
+    this.shaftMat.color.lerp(this.tintTarget, Math.min(1, dt * 0.9));
+    this.scene.fog.color.lerp(this.fogTarget, Math.min(1, dt * 0.7));
+    this.renderer.setClearColor(this.scene.fog.color, 1);
+
+    // 深度雾 / 压暗 / 矿脉异常
+    const f = CONFIG.fx;
+    const deepT = clamp((S.depth - f.fogStartDepth) / (f.fogEndDepth - f.fogStartDepth), 0, 1);
+    this.deep = deepT;
+    this.scene.fog.density = lerp(f.fogBase, f.fogMax, deepT * deepT);
+    this.dirTop.intensity  = lerp(1.25, 0.35, deepT);
+    this.dirDeep.intensity = lerp(0.30, 0.85, deepT);
+    this.amb.intensity     = lerp(1.0, 0.55, deepT);
+
+    // 钻头：转速随挖掘速度提升
+    this.punch = Math.max(0, this.punch - dt * CONFIG.fx.shakeDecay);
+    const spinSpeed = 2.2 + Math.min(26, D.dps * 0.045) + this.punch * 5;
+    this.spin += spinSpeed * dt;
+    this.drill.rotation.y = this.spin;
+    this.drill.position.y = this.drillY() - this.punch * 0.35 + Math.sin(this.time * 2) * 0.06;
+    this.drill.position.x = Math.sin(this.time * 1.3) * 0.08;
+    this.drillGlow.position.set(0, this.drillY() - 0.6, 0);
+    this.drillGlow.material.opacity = 0.55 + 0.25 * Math.sin(this.time * 3) + this.punch * 0.12;
+
+    // 矿脉（含深部闪烁）
+    this.refreshVeinColors(false);
+    // 碎石
+    this.updateDebris(dt);
+
+    // 镜头晃动
+    if (this.shake > 0) this.shake = Math.max(0, this.shake - dt * CONFIG.fx.shakeDecay);
+    const sh = this.shake;
+    this.camera.position.set(
+      Math.sin(this.time * 37) * sh * 0.55,
+      this.camY + 0.6 + Math.cos(this.time * 41) * sh * 0.45,
+      3.6 + Math.sin(this.time * 29) * sh * 0.3
+    );
+    this.camera.lookAt(0, this.camY - 7.2, 0);
+    if (sh > 0.01) this.camera.rotation.z += Math.sin(this.time * 33) * sh * 0.02;
+
+    this.renderer.render(this.scene, this.camera);
+  },
+
+  resize() {
+    if (!this.renderer) return;
+    const r = this.canvas.getBoundingClientRect();
+    const w = Math.max(1, Math.floor(r.width)), h = Math.max(1, Math.floor(r.height));
+    this.camera.aspect = w / h;
+    this.camera.updateProjectionMatrix();
+    this.renderer.setSize(w, h, false);
+  }
+};
+
+/* ==========================================================================
+ * §7.5  FX —— 购买特效系统
+ *      每种升级 / 建筑拥有一套独立表现：冲击波环、光柱、粒子形态、闪光、震屏、音效。
+ *      想调整某种升级的特效，只需改下面的 FX_DEFS 对应项。
+ *      mode 说明见 Scene.emit()：burst / jet / spiral / rain / spark
+ * ========================================================================== */
+const FX_DEFS = {
+  /* ---- 钻探升级 ---- */
+  drill: {   // 钻头重构：金色螺旋火花 + 冲击环 + 电流音
+    sound:'zap', shake:0.45,
+    ring:{ color:0xffc46b, from:0.7, to:7.5, life:0.7 },
+    parts:{ mode:'spiral', n:28, color:0xffc46b, power:1.15 },
+    flash:['#ffb04a', 0.40], tip:'刀头重构'
+  },
+  hydro: {   // 液压增压：蓝色高压液柱上喷
+    sound:'steam', shake:0.25,
+    ring:{ color:0x4fc3ff, from:0.5, to:5.5, life:0.6 },
+    parts:{ mode:'jet', n:34, color:0x4fc3ff, power:1.3 },
+    flash:['#3aa0ff', 0.30], tip:'液压回路超压'
+  },
+  sonar: {   // 声波探路：青色三重声呐涟漪 + 电火花
+    sound:'shimmer', shake:0.20,
+    ring:{ color:0x38e0d0, from:0.4, to:9, life:1.0, count:3, gap:0.16 },
+    parts:{ mode:'spark', n:20, color:0x7ffff0, power:1.2 },
+    flash:['#38e0d0', 0.28], tip:'声呐脉冲'
+  },
+  demo:  {   // 深层爆破：大规模橙色爆破 + 光柱 + 强震
+    sound:'boom', shake:1.7,
+    ring:{ color:0xff8c3a, from:0.6, to:12, life:0.85, count:2, gap:0.1 },
+    parts:{ mode:'burst', n:130, color:0xff7a2a, power:1.9 },
+    beam:{ color:0xff8c3a, life:0.5 },
+    flash:['#ff7a2a', 0.62], tip:'深层预裂爆破'
+  },
+  /* ---- 矿工与设施 ---- */
+  miner: {   // 学徒矿工：小规模扬尘
+    sound:'ui', shake:0.12,
+    parts:{ mode:'burst', n:14, color:0xb98a5a, power:0.8 },
+    tip:'新矿工下井'
+  },
+  blaster: { // 爆破班组：爆破闪光
+    sound:'boom', shake:0.9,
+    ring:{ color:0xff9d3c, from:0.6, to:8, life:0.7 },
+    parts:{ mode:'burst', n:70, color:0xff9d3c, power:1.5 },
+    flash:['#ff7a2a', 0.45], tip:'装药起爆'
+  },
+  rig:   {   // 气动钻机：白色蒸汽喷发
+    sound:'steam', shake:0.30,
+    parts:{ mode:'jet', n:40, color:0xdfe8ee, power:1.4 },
+    flash:['#cfe0ea', 0.26], tip:'压缩空气启动'
+  },
+  refine:{   // 选矿厂：蓝色提纯光柱 + 螺旋
+    sound:'shimmer', shake:0.22,
+    ring:{ color:0x9be7ff, from:0.5, to:6.5, life:0.8 },
+    parts:{ mode:'spiral', n:26, color:0x9be7ff, power:1.0 },
+    beam:{ color:0x9be7ff, life:0.8 },
+    flash:['#9be7ff', 0.30], tip:'矿石提纯'
+  },
+  mole:  {   // 隧道掘进机：土黄色泥浪
+    sound:'boom', shake:1.0,
+    ring:{ color:0x8a6a45, from:0.8, to:10, life:0.8, count:2, gap:0.12 },
+    parts:{ mode:'burst', n:85, color:0xa07c52, power:1.5 },
+    flash:['#8a6a45', 0.34], tip:'刀盘贯入'
+  },
+  contract:{ // 市场合约：金色金币雨
+    sound:'chime', shake:0.20,
+    parts:{ mode:'rain', n:48, color:0xffd45e, power:1.0 },
+    flash:['#ffd45e', 0.32], tip:'合约签署'
+  },
+  plasma:{   // 等离子钻头：橙白高温射流
+    sound:'zap', shake:0.85,
+    ring:{ color:0xff5a1f, from:0.7, to:9, life:0.7 },
+    parts:{ mode:'jet', n:70, color:0xff6a2a, power:1.7 },
+    beam:{ color:0xff7a2a, life:0.6 },
+    flash:['#ff5a1f', 0.55], tip:'等离子射流点火'
+  },
+  array:{    // 自动钻井阵列：蓝色网格激光环
+    sound:'zap', shake:0.5,
+    ring:{ color:0x7fd7ff, from:0.5, to:11, life:0.9, count:2, gap:0.18 },
+    parts:{ mode:'spiral', n:44, color:0x9fdcff, power:1.2 },
+    flash:['#7fd7ff', 0.38], tip:'钻探矩阵上线'
+  },
+  geo:   {   // 地热电站：红橙热浪上升
+    sound:'steam', shake:0.65,
+    ring:{ color:0xff6b3d, from:0.6, to:9, life:0.9 },
+    parts:{ mode:'jet', n:60, color:0xff6b3d, power:1.6 },
+    beam:{ color:0xff6b3d, life:0.9 },
+    flash:['#ff6b3d', 0.45], tip:'地热导流'
+  },
+  reson: {   // 共振发生器：紫色多重共振波
+    sound:'shimmer', shake:0.75,
+    ring:{ color:0xb98cff, from:0.4, to:13, life:1.1, count:4, gap:0.14 },
+    parts:{ mode:'spiral', n:56, color:0xc9a4ff, power:1.3 },
+    flash:['#b98cff', 0.48], tip:'井筒共振'
+  },
+  /* ---- 里程碑 ---- */
+  layer: {   // 进入新矿层：金色大爆发（音效由 checkLayer 单独播放）
+    sound:null, shake:1.1,
+    ring:{ color:0xffd88a, from:0.8, to:14, life:1.1, count:2, gap:0.2 },
+    parts:{ mode:'burst', n:150, color:0xffd88a, power:1.8 },
+    beam:{ color:0xffd88a, life:0.7 },
+    flash:['#ffd88a', 0.55], tip:''
+  }
+};
+
+const FX = {
+  ok:false, rings:[], beams:[], flashEl:null, _tmp:null,
+
+  init() {
+    if (!Scene.ok || !Scene.scene) return false;
+    this._tmp = new THREE.Color();
+    const scene = Scene.scene;
+
+    // 冲击波环池（水平放置，从钻头向外扩散）
+    const ringGeo = new THREE.RingGeometry(0.88, 1.0, 36);
+    for (let i = 0; i < 12; i++) {
+      const mat = new THREE.MeshBasicMaterial({
+        color: 0xffffff, transparent: true, opacity: 0, side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending, depthWrite: false, fog: false
+      });
+      const mesh = new THREE.Mesh(ringGeo, mat);
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.visible = false;
+      mesh.frustumCulled = false;
+      scene.add(mesh);
+      this.rings.push({ mesh: mesh, mat: mat, active: false, delay: 0, life: 0, life0: 1, from: 1, to: 8 });
+    }
+    // 光柱池（从钻头向上）
+    const beamGeo = new THREE.CylinderGeometry(0.7, 1.1, 26, 14, 1, true);
+    for (let i = 0; i < 5; i++) {
+      const mat = new THREE.MeshBasicMaterial({
+        color: 0xffffff, transparent: true, opacity: 0, side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending, depthWrite: false, fog: false
+      });
+      const mesh = new THREE.Mesh(beamGeo, mat);
+      mesh.visible = false;
+      mesh.frustumCulled = false;
+      scene.add(mesh);
+      this.beams.push({ mesh: mesh, mat: mat, active: false, delay: 0, life: 0, life0: 1 });
+    }
+    // 全屏闪光层（DOM，零 GPU 成本）
+    this.flashEl = el('div', 'fx-flash');
+    const app = $('app');
+    if (app) app.appendChild(this.flashEl);
+    this.ok = true;
+    return true;
+  },
+
+  /** 播放某种升级 / 建筑的特效。level = 购买后的等级或数量（越高越华丽） */
+  play(id, level) {
+    if (!this.ok) return;
+    const d = FX_DEFS[id];
+    if (!d) return;
+    const lv = Math.max(1, level || 1);
+    const scale = clamp(1 + Math.log(lv) / 7, 1, 2.0);          // 等级越高越华丽
+    const q = S.settings.quality === 'low' ? 0.5 : (S.settings.quality === 'high' ? 1.25 : 1);
+    const on = (S.settings.fx !== false);
+
+    if (d.sound && Sound[d.sound]) Sound[d.sound]();
+    Scene.shake = Math.max(Scene.shake, (d.shake || 0.3) * (on ? 1 : 0.35));
+    if (!on) return;                                            // 关闭特效：只保留音效与轻微晃动
+
+    if (d.ring) {
+      let n = d.ring.count || 1;
+      if (q < 1) n = 1;                                        // 低画质只保留一环
+      const gap = d.ring.gap || 0;
+      for (let i = 0; i < Math.min(n, 4); i++) this._ring(d.ring, i * gap);
+    }
+    if (d.beam && q >= 1) this._beam(d.beam);
+    if (d.parts) {
+      Scene.emit(d.parts.mode, Math.round((d.parts.n || 20) * q * scale),
+                 d.parts.color, (d.parts.power || 1));
+    }
+    if (d.flash) this.flash(d.flash[0], d.flash[1]);
+    if (d.tip) {
+      const owned = (level || 1);
+      toast(d.tip + '　·　' + owned, 'cyan');
+    }
+  },
+
+  _ring(cfg, delay) {
+    for (let i = 0; i < this.rings.length; i++) {
+      const r = this.rings[i];
+      if (r.active) continue;
+      r.active = true;
+      r.delay = delay || 0;
+      r.life = r.life0 = cfg.life || 0.75;
+      r.from = cfg.from || 1;
+      r.to = cfg.to || 8;
+      r.mat.color.setHex(cfg.color === undefined ? 0xffffff : cfg.color);
+      r.mat.opacity = 0;
+      r.mesh.visible = false;
+      return r;
+    }
+    return null;
+  },
+
+  _beam(cfg) {
+    for (let i = 0; i < this.beams.length; i++) {
+      const b = this.beams[i];
+      if (b.active) continue;
+      b.active = true;
+      b.delay = 0;
+      b.life = b.life0 = cfg.life || 0.7;
+      b.mat.color.setHex(cfg.color === undefined ? 0xffffff : cfg.color);
+      b.mat.opacity = 0;
+      b.mesh.visible = false;
+      return b;
+    }
+    return null;
+  },
+
+  /** 全屏闪光：DOM 层，用一次 transition 完成淡出；淡出后 display:none 避免常驻合成开销 */
+  flash(color, alpha) {
+    const e = this.flashEl;
+    if (!e) return;
+    if (this._flashTO) { clearTimeout(this._flashTO); this._flashTO = null; }
+    e.style.display = 'block';
+    e.style.transition = 'none';
+    e.style.background = 'radial-gradient(circle at 50% 42%, ' + color + ', rgba(0,0,0,0) 68%)';
+    e.style.opacity = String(alpha || 0.35);
+    void e.offsetWidth;                       // 强制回流，使下一次 transition 生效
+    e.style.transition = 'opacity .5s ease-out';
+    e.style.opacity = '0';
+    this._flashTO = setTimeout(function () { e.style.display = 'none'; }, 560);
+  },
+
+  update(dt) {
+    if (!this.ok) return;
+    const baseY = Scene.drillY() - 1.0;
+    for (let i = 0; i < this.rings.length; i++) {
+      const r = this.rings[i];
+      if (!r.active) continue;
+      if (r.delay > 0) { r.delay -= dt; continue; }
+      r.mesh.visible = true;
+      r.life -= dt;
+      const k = clamp(r.life / r.life0, 0, 1);          // 1 → 0
+      const s = lerp(r.to, r.from, k);                  // 由小扩散到大
+      r.mesh.position.set(0, baseY, 0);
+      r.mesh.scale.set(s, s, s);
+      r.mesh.rotation.z += dt * 0.7;
+      r.mat.opacity = k * k * 0.85;
+      if (r.life <= 0) { r.active = false; r.mesh.visible = false; r.mat.opacity = 0; }
+    }
+    for (let i = 0; i < this.beams.length; i++) {
+      const b = this.beams[i];
+      if (!b.active) continue;
+      if (b.delay > 0) { b.delay -= dt; continue; }
+      b.mesh.visible = true;
+      b.life -= dt;
+      const k = clamp(b.life / b.life0, 0, 1);
+      b.mesh.position.set(0, baseY + 12, 0);
+      const w = lerp(1.4, 0.5, k);
+      b.mesh.scale.set(w, 1, w);
+      b.mesh.rotation.y += dt * 2.4;
+      b.mat.opacity = k * 0.5;
+      if (b.life <= 0) { b.active = false; b.mesh.visible = false; b.mat.opacity = 0; }
+    }
+  }
+};
+
+/* ---------------- 程序化贴图 / 模型 ---------------- */
+function makeGlowTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d');
+  const grd = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grd.addColorStop(0.00, 'rgba(255,255,255,1)');
+  grd.addColorStop(0.28, 'rgba(255,255,255,0.62)');
+  grd.addColorStop(0.65, 'rgba(255,255,255,0.14)');
+  grd.addColorStop(1.00, 'rgba(255,255,255,0)');
+  g.fillStyle = grd;
+  g.fillRect(0, 0, 64, 64);
+  const t = new THREE.CanvasTexture(c);
+  t.needsUpdate = true;
+  return t;
+}
+
+/** 岩层贴图：分层色带 + 噪点 + 裂纹 + 孔洞（512×1024） */
+function makeRockTexture() {
+  const c = document.createElement('canvas');
+  c.width = 512; c.height = 1024;
+  const g = c.getContext('2d');
+  const W = c.width, H = c.height;
+
+  const grd = g.createLinearGradient(0, 0, 0, H);
+  grd.addColorStop(0, '#3b342c');
+  grd.addColorStop(0.5, '#4b4038');
+  grd.addColorStop(1, '#2a2521');
+  g.fillStyle = grd; g.fillRect(0, 0, W, H);
+
+  // 沉积色带
+  let y = 0;
+  while (y < H) {
+    const h = randInt(12, 78);
+    const s = randInt(26, 92);
+    const warm = randInt(-12, 20);
+    g.globalAlpha = rand(0.32, 0.8);
+    g.fillStyle = 'rgb(' + clamp(s + warm + 20, 0, 255) + ',' +
+                           clamp(s + Math.floor(warm * 0.4) + 14, 0, 255) + ',' +
+                           clamp(s - Math.floor(warm * 0.3) + 8, 0, 255) + ')';
+    g.fillRect(0, y, W, h);
+    g.globalAlpha = 0.22;
+    g.fillStyle = '#0c0a08';
+    g.fillRect(0, y, W, randInt(1, 3));      // 层理线
+    y += h;
+  }
+  g.globalAlpha = 1;
+
+  // 噪点
+  for (let i = 0; i < 13000; i++) {
+    g.fillStyle = Math.random() < 0.55
+      ? 'rgba(0,0,0,' + rand(0.05, 0.34).toFixed(3) + ')'
+      : 'rgba(255,255,255,' + rand(0.03, 0.15).toFixed(3) + ')';
+    g.fillRect((Math.random() * W) | 0, (Math.random() * H) | 0, randInt(1, 2), randInt(1, 2));
+  }
+
+  // 裂纹
+  for (let i = 0; i < 76; i++) {
+    let x = Math.random() * W, yy = Math.random() * H;
+    g.strokeStyle = 'rgba(0,0,0,' + rand(0.22, 0.6).toFixed(3) + ')';
+    g.lineWidth = rand(0.6, 2.3);
+    g.beginPath(); g.moveTo(x, yy);
+    const seg = randInt(3, 9);
+    for (let s = 0; s < seg; s++) { x += rand(-46, 46); yy += rand(6, 56); g.lineTo(x, yy); }
+    g.stroke();
+    g.strokeStyle = 'rgba(255,255,255,0.045)';
+    g.lineWidth = 0.9;
+    g.stroke();
+  }
+
+  // 孔洞 / 溶蚀暗斑
+  for (let i = 0; i < 28; i++) {
+    const x = Math.random() * W, yy = Math.random() * H, r = rand(6, 28);
+    const rg = g.createRadialGradient(x, yy, 0, x, yy, r);
+    rg.addColorStop(0, 'rgba(0,0,0,0.72)');
+    rg.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = rg;
+    g.beginPath(); g.arc(x, yy, r, 0, Math.PI * 2); g.fill();
+  }
+
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = THREE.RepeatWrapping;
+  t.wrapT = THREE.RepeatWrapping;
+  t.needsUpdate = true;
+  return t;
+}
+
+/** 钻头：圆锥 + 圆柱 + 刀翼 + 环 */
+function buildDrill() {
+  const g = new THREE.Group();
+  const body = new THREE.MeshPhongMaterial({ color: 0x4a5058, emissive: 0x0a0d10, shininess: 70, specular: 0x9aa4b0 });
+  const tip  = new THREE.MeshPhongMaterial({ color: 0xffa63a, emissive: 0x6e3200, shininess: 95, specular: 0xffd9a0 });
+  const ring = new THREE.MeshPhongMaterial({ color: 0x2ad0c8, emissive: 0x0b4740, shininess: 80 });
+
+  const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.62, 3.0, 16), body);
+  g.add(stem);
+  const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.80, 0.62, 0.45, 16), body);
+  cap.position.y = 1.66;
+  g.add(cap);
+  const cone = new THREE.Mesh(new THREE.ConeGeometry(1.15, 2.5, 18), tip);
+  cone.rotation.x = Math.PI;                 // 尖端朝下
+  cone.position.y = -2.75;
+  g.add(cone);
+  // 三片刀翼
+  for (let i = 0; i < 3; i++) {
+    const blade = new THREE.Mesh(new THREE.BoxGeometry(0.14, 1.9, 0.62), tip);
+    const a = i / 3 * Math.PI * 2;
+    blade.position.set(Math.cos(a) * 0.72, -2.1, Math.sin(a) * 0.72);
+    blade.rotation.y = -a;
+    blade.rotation.z = 0.22;
+    g.add(blade);
+  }
+  const tr = new THREE.Mesh(new THREE.TorusGeometry(0.78, 0.11, 8, 20), ring);
+  tr.rotation.x = Math.PI / 2;
+  tr.position.y = -1.5;
+  g.add(tr);
+  return g;
+}
+
+/* ==========================================================================
+ * §8  UI —— HUD / 面板 / 弹窗 / 浮动数字 / 打字机
+ * ========================================================================== */
+const UI = {
+  modalOpen:false,
+  rows: [],          // 需要定期刷新的购买行
+  activeTab: 'drill',
+  archBuilt: false
+};
+const Disp = { depth:0, coins:0, ore:0, cps:0 };   // 数字滚动动画用的显示值
+
+/* ---------------- 主题（配色随深度演变） ---------------- */
+function hexCss(n) { return '#' + ('000000' + (n >>> 0).toString(16)).slice(-6); }
+function applyTheme(li) {
+  const lay = LAYERS[clamp(li, 0, LAYERS.length - 1)];
+  document.documentElement.style.setProperty('--accent', hexCss(lay.color));
+  document.documentElement.style.setProperty('--accent2', li >= 5 ? '#38e0d0' : '#7fd7f0');
+  document.documentElement.style.setProperty('--bg', hexCss(lay.fog));
+  document.body.style.background = hexCss(lay.fog);
+  updateDarkness();
+}
+function updateDarkness() {
+  const d = $('dark');
+  if (!d) return;
+  d.style.opacity = clamp((S.depth - CONFIG.fx.darkStartDepth) / 6000, 0, 0.9).toFixed(3);
+}
+
+/* ---------------- Toast / 浮动数字 / 抖屏 ---------------- */
+function toast(msg, cls) {
+  const box = $('toasts');
+  if (!box) return;
+  const t = el('div', 'toast' + (cls ? ' ' + cls : ''), msg);
+  box.appendChild(t);
+  setTimeout(function () { if (t.parentNode) t.parentNode.removeChild(t); }, 3200);
+}
+function floater(text, x, y, cls) {
+  const box = $('floaters');
+  if (!box) return;
+  const f = el('div', 'floater' + (cls ? ' ' + cls : ''), text);
+  f.style.left = clamp(x || window.innerWidth / 2, 30, window.innerWidth - 30) + 'px';
+  f.style.top  = clamp(y || window.innerHeight * 0.3, 40, window.innerHeight - 40) + 'px';
+  box.appendChild(f);
+  setTimeout(function () { if (f.parentNode) f.parentNode.removeChild(f); }, 1050);
+}
+let shakeTimer = null;
+function shakeScreen(power) {
+  const app = $('app');
+  if (!app) return;
+  app.classList.remove('shake');
+  void app.offsetWidth;
+  app.classList.add('shake');
+  if (shakeTimer) clearTimeout(shakeTimer);
+  shakeTimer = setTimeout(function () { app.classList.remove('shake'); }, 470);
+  Scene.shake = Math.max(Scene.shake, power || 0.6);
+}
+let glitchTimer = null;
+function glitch() {
+  const app = $('app');
+  if (!app) return;
+  app.classList.remove('glitch');
+  void app.offsetWidth;
+  app.classList.add('glitch');
+  if (glitchTimer) clearTimeout(glitchTimer);
+  glitchTimer = setTimeout(function () { app.classList.remove('glitch'); }, 1200);
+}
+
+/* ---------------- 加密乱码（未解锁档案） ---------------- */
+function scramble(seed, len) {
+  const chars = '▓▒░#@%&*?!▚▞╳§¤≠∞⌁⍀⎔⏃⏚';
+  let x = (seed * 9301 + 49297) % 233280;
+  let s = '';
+  for (let i = 0; i < len; i++) {
+    x = (x * 9301 + 49297) % 233280;
+    s += chars[Math.floor(x / 233280 * chars.length)];
+    if (i % 22 === 21) s += ' ';
+  }
+  return s;
+}
+
+/* ---------------- 通用弹窗 ---------------- */
+function openModal(opt) {
+  const layer = $('modalLayer');
+  if (!layer) return null;
+  layer.innerHTML = '';
+  const m = el('div', 'modal' + (opt.cls ? ' ' + opt.cls : ''));
+  const hd = el('div', 'modal-hd');
+  hd.appendChild(el('div', 'mt', opt.title || ''));
+  if (opt.sub) hd.appendChild(el('div', 'ms', opt.sub));
+  const bd = el('div', 'modal-bd');
+  if (typeof opt.body === 'string') bd.innerHTML = opt.body;
+  else if (opt.body) bd.appendChild(opt.body);
+  m.appendChild(hd); m.appendChild(bd);
+
+  const ft = el('div', 'modal-ft');
+  (opt.buttons || [{ label: '关闭' }]).forEach(function (b) {
+    const btn = el('button', 'btn ' + (b.cls || 'ghost'), b.label || '确定');
+    btn.addEventListener('click', function () {
+      Sound.ui();
+      if (b.onClick) b.onClick(m);
+      else closeModal();
+    });
+    ft.appendChild(btn);
+  });
+  m.appendChild(ft);
+  layer.appendChild(m);
+  layer.classList.remove('hidden');
+  UI.modalOpen = true;
+  UI._modal = m;
+  if (opt.dismissible !== false) {
+    layer.onclick = function (e) { if (e.target === layer) closeModal(); };
+  } else { layer.onclick = null; }
+  return m;
+}
+function closeModal() {
+  const layer = $('modalLayer');
+  if (!layer) return;
+  if (UI._typer) { UI._typer.stop(); UI._typer = null; }
+  layer.innerHTML = '';
+  layer.classList.add('hidden');
+  layer.onclick = null;
+  UI.modalOpen = false;
+  UI._modal = null;
+  // 日志排队：关掉一条就弹下一条
+  if (logQueue.length) setTimeout(function () { showLogModal(logQueue.shift()); }, 180);
+}
+
+/* ---------------- 打字机 ---------------- */
+function typewriter(container, text, speed, onDone) {
+  const txt = el('span', '', '');
+  const caret = el('span', 'caret', '\u00a0');
+  container.appendChild(txt);
+  container.appendChild(caret);
+  let i = 0, finished = false;
+  const finish = function () {
+    if (finished) return;
+    finished = true;
+    clearInterval(timer);
+    txt.textContent = text;
+    if (caret.parentNode) caret.parentNode.removeChild(caret);
+    if (onDone) onDone();
+  };
+  const timer = setInterval(function () {
+    i = Math.min(text.length, i + (Math.random() < 0.3 ? 2 : 1));
+    txt.textContent = text.slice(0, i);
+    if (i >= text.length) finish();
+  }, speed);
+  return { stop: function () { clearInterval(timer); }, skip: finish };
+}
+
+/* ---------------- 勘探日志弹窗 ---------------- */
+function showLogModal(L, reread) {
+  if (!L) { closeModal(); return; }
+  const ch = CHAPTERS.filter(function (c) { return c.id === L.ch; })[0] || CHAPTERS[0];
+  const idx = LOGS.indexOf(L);
+  const body = el('div', '');
+  body.appendChild(el('div', 'logmeta',
+    '档案编号 ' + L.id + '　·　阶段《' + ch.name + '》\n记录深度 ' + fmt(L.depth) + ' m'));
+  const twBox = el('div', 'typing');
+  body.appendChild(twBox);
+  const rewardBox = el('div', 'reward');
+  rewardBox.style.display = 'none';
+  body.appendChild(rewardBox);
+
+  openModal({
+    title: '勘探日志 #' + String(idx + 1).padStart(3, '0'),
+    sub: ch.name + '　/　' + ch.range,
+    cls: 'warn',
+    body: body,
+    dismissible: true,
+    buttons: [{ label: '确认', cls: 'primary', onClick: function () { closeModal(); } }]
+  });
+
+  UI._typer = typewriter(twBox, L.text, CONFIG.narrative.typeSpeed, function () {
+    UI._typer = null;
+    if (reread) { rewardBox.style.display = 'block'; rewardBox.textContent = '已归档 · 无重复奖励'; return; }
+    rewardBox.style.display = 'block';
+    rewardBox.textContent = (L.reward === 'coins')
+      ? '奖励已发放：金币爆发（按当前产出结算）'
+      : '奖励已发放：永久产能 +' + Math.round(CONFIG.narrative.rewardProdPct * 100) + '%';
+  });
+  // 点击正文可跳过打字
+  twBox.addEventListener('click', function () { if (UI._typer) UI._typer.skip(); });
+
+  if (!reread) {
+    Sound.logTone();
+    shakeScreen(0.55);
+    glitch();
+    UI.archBuilt = false;
+  }
+}
+
+/* ---------------- 离线结算弹窗 ---------------- */
+function showOfflineModal(res) {
+  if (!res) return;
+  const body = el('div', '');
+  body.appendChild(el('div', 'logmeta', '井队在无人值守期间继续作业。'));
+  const rows = [
+    ['离线时长', fmtTime(res.seconds) + (res.capped ? '（已达 8 小时上限）' : '')],
+    ['深度推进', '+' + fmtDepth(res.depth) + ' m'],
+    ['矿石产出', '+' + fmt(res.ore)],
+    ['金币收入', '+' + fmt(res.coins)]
+  ];
+  rows.forEach(function (r) {
+    const row = el('div', 'row');
+    row.appendChild(el('div', 'kv', r[0]));
+    row.appendChild(el('div', 'kv', '<b>' + r[1] + '</b>'));
+    body.appendChild(row);
+  });
+  if (!S.autosell && res.ore > 0) {
+    body.appendChild(el('div', 'card-note', '矿石已存入矿仓，可在「钻探」页出售。'));
+  }
+  openModal({
+    title: '离线结算', sub: 'OFFLINE REPORT', body: body,
+    buttons: [{ label: '收下', cls: 'primary', onClick: function () { closeModal(); } }]
+  });
+}
+
+/* ---------------- 购买行 ---------------- */
+function createRow(opt) {
+  const root = el('div', 'item');
+  const icon = el('div', 'item-icon', opt.icon);
+  const main = el('div', 'item-main');
+  const title = el('div', 'item-title');
+  const nm = el('span', 'nm', opt.name);
+  const lvl = el('span', 'lvl', '');
+  title.appendChild(nm); title.appendChild(lvl);
+  const desc = el('div', 'item-desc', opt.desc);
+  const meta = el('div', 'item-meta', '');
+  main.appendChild(title); main.appendChild(desc); main.appendChild(meta);
+
+  const buy = el('div', 'item-buy');
+  const btns = [];
+  [['1', '买 1'], ['10', '买 10'], ['max', '最大']].forEach(function (p) {
+    const b = el('button', 'buy' + (p[0] === 'max' ? ' max' : ''));
+    b.appendChild(el('b', '', p[1]));
+    const sp = el('span', '', '');
+    b.appendChild(sp);
+    b.addEventListener('click', function () { opt.onBuy(p[0]); });
+    buy.appendChild(b);
+    btns.push({ btn: b, cost: sp, n: p[0] });
+  });
+  root.appendChild(icon); root.appendChild(main); root.appendChild(buy);
+  const row = { root: root, lvl: lvl, meta: meta, btns: btns, update: opt.update, kind: opt.kind, data: opt.data };
+  UI.rows.push(row);
+  return row;
+}
+
+function pct(x) { return Math.round(x * 100) + '%'; }
+
+function updateBuildingRow(b, row) {
+  const unlocked = isUnlockedBuilding(b);
+  const own = S.b[b.id] || 0;
+  row.root.classList.toggle('locked', !unlocked);
+  row.lvl.textContent = own > 0 ? ('×' + own) : '';
+
+  let m = '';
+  if (b.dps)      m += '+' + fmt(b.dps) + ' m/s';
+  if (b.dpsAdd)   m += ' 挖掘速度 +' + pct(b.dpsAdd);
+  if (b.oreAdd)   m += ' 矿石 +' + pct(b.oreAdd);
+  if (b.priceAdd) m += ' 售价 +' + pct(b.priceAdd);
+  if (own > 0 && b.dps) m += ' <span class="muted">· 合计 ' + fmt(b.dps * own) + ' m/s</span>';
+  row.meta.innerHTML = m;
+
+  if (!unlocked) {
+    const why = (b.needPrestige && S.prestige < b.needPrestige)
+      ? ('第 ' + b.needPrestige + ' 周目') : (fmt(b.unlock) + ' m');
+    row.btns.forEach(function (x) { x.btn.disabled = true; x.btn.classList.remove('can'); x.cost.textContent = '🔒 ' + why; });
+    return;
+  }
+  row.btns.forEach(function (x) {
+    const n = x.n === 'max' ? buildingMax(b) : parseInt(x.n, 10);
+    const cost = buildingCost(b, n);
+    const can = n > 0 && S.coins >= cost;
+    x.btn.disabled = !can;
+    x.btn.classList.toggle('can', can);
+    x.cost.textContent = x.n === 'max'
+      ? (n > 0 ? ('×' + n + ' · ' + fmt(cost)) : '—')
+      : fmt(cost);
+  });
+}
+
+function updateUpgradeRow(u, row) {
+  const lv = S.u[u.id] || 0;
+  row.lvl.textContent = 'Lv.' + lv;
+  let m = '';
+  if (u.kind === 'clickPow') m = '点击深度 ×' + Math.pow(u.per, lv).toFixed(2) + ' <span class="muted">· 单次 +' + fmtDepth(D.clickDepth) + ' m</span>';
+  else if (u.kind === 'oreAdd')   m = '矿石产出 +' + pct(u.per * lv) + ' <span class="muted">· 下一级 +' + pct(u.per) + '</span>';
+  else if (u.kind === 'priceAdd') m = '矿石售价 +' + pct(u.per * lv) + ' <span class="muted">· 下一级 +' + pct(u.per) + '</span>';
+  else if (u.kind === 'speedAdd') m = '全局挖掘速度 +' + pct(u.per * lv) + ' <span class="muted">· 下一级 +' + pct(u.per) + '</span>';
+  row.meta.innerHTML = m;
+  row.btns.forEach(function (x) {
+    const n = x.n === 'max' ? upgradeMax(u) : parseInt(x.n, 10);
+    const cost = upgradeCost(u, n);
+    const can = n > 0 && S.coins >= cost;
+    x.btn.disabled = !can;
+    x.btn.classList.toggle('can', can);
+    x.cost.textContent = x.n === 'max'
+      ? (n > 0 ? ('×' + n + ' · ' + fmt(cost)) : '—')
+      : fmt(cost);
+  });
+}
+
+/* ---------------- 各面板构建 ---------------- */
+function buildDrillPane() {
+  const pane = $('pane-drill');
+  pane.innerHTML = '';
+  UI.rows = UI.rows.filter(function (r) { return r.kind !== 'up'; });
+
+  /* 出售矿石 */
+  const sellCard = el('div', 'card');
+  sellCard.appendChild(el('div', 'card-title', '矿仓<small id="sellRate"></small>'));
+  const sellBody = el('div', '');
+  const r1 = el('div', 'row');
+  r1.appendChild(el('div', 'kv', '当前矿石 <b id="sellOre">0</b>'));
+  r1.appendChild(el('div', 'kv', '当前单价 <b id="sellPrice">1</b>'));
+  sellBody.appendChild(r1);
+  const r2 = el('div', 'row');
+  const btnSell = el('button', 'btn primary', '出售全部');
+  const btnAuto = el('button', 'switch', '自动出售');
+  r2.appendChild(btnSell); r2.appendChild(btnAuto);
+  sellBody.appendChild(r2);
+  sellCard.appendChild(sellBody);
+  sellCard.appendChild(el('div', 'card-note', '矿石单价由当前矿层决定，随深度提升。开启自动出售后矿石直接折算为金币。'));
+  pane.appendChild(sellCard);
+
+  btnSell.addEventListener('click', function () {
+    const c = sellOre();
+    if (c > 0) {
+      toast('售出矿石，获得 ' + fmt(c) + ' 金币');
+      floater('+' + fmt(c) + ' 金币', window.innerWidth / 2, window.innerHeight * 0.3, 'coin');
+      refreshRows();
+    }
+  });
+  btnAuto.addEventListener('click', function () {
+    S.autosell = !S.autosell;
+    btnAuto.classList.toggle('on', S.autosell);
+    btnAuto.textContent = S.autosell ? '自动出售 · 开' : '自动出售 · 关';
+    Sound.ui();
+    saveGame();
+  });
+  UI._btnAuto = btnAuto;
+
+  /* 转生 */
+  const pre = el('div', 'card');
+  pre.appendChild(el('div', 'card-title', '岩芯提取<small>RESET &amp; ASCEND</small>'));
+  const pr1 = el('div', 'row');
+  pr1.appendChild(el('div', 'kv', '本次最深 <b id="preMax">0</b> m'));
+  pr1.appendChild(el('div', 'kv', '可提取岩芯 <b id="preGain" class="amber">0</b>'));
+  pre.appendChild(pr1);
+  const btnPre = el('button', 'btn cyan block', '提取岩芯 · 转生');
+  btnPre.style.marginTop = '8px';
+  pre.appendChild(btnPre);
+  pre.appendChild(el('div', 'card-note',
+    '重置深度 / 金币 / 矿石 / 全部建筑与升级；保留档案日志、成就与转生次数。<br>' +
+    '每枚岩芯：挖掘速度 +10%、矿石售价 +5%（永久叠加）。'));
+  pane.appendChild(pre);
+  btnPre.addEventListener('click', function () {
+    if (!canPrestige()) { toast('需要更深的最深深度才能提取岩芯（至少 ' + CONFIG.prestige.minDepth + ' m）'); return; }
+    confirmPrestige();
+  });
+  UI._btnPre = btnPre;
+
+  /* 升级列表 */
+  pane.appendChild(el('div', 'list-head', '钻探设备'));
+  UPGRADES.forEach(function (u) {
+    const row = createRow({
+      kind: 'up', icon: u.icon, name: u.name, desc: u.desc, data: u,
+      onBuy: function (n) {
+        if (buyUpgrade(u, n)) { refreshRows(); updateHUD(0); }
+      },
+      update: function (r) { updateUpgradeRow(u, r); }
+    });
+    pane.appendChild(row.root);
+  });
+}
+
+function buildCrewPane() {
+  const pane = $('pane-crew');
+  pane.innerHTML = '';
+  UI.rows = UI.rows.filter(function (r) { return r.kind !== 'bld'; });
+  pane.appendChild(el('div', 'list-head', '矿工与设施'));
+  BUILDINGS.forEach(function (b) {
+    const row = createRow({
+      kind: 'bld', icon: b.icon, name: b.name, desc: b.desc, data: b,
+      onBuy: function (n) {
+        if (buyBuilding(b, n)) { refreshRows(); updateHUD(0); }
+      },
+      update: function (r) { updateBuildingRow(b, r); }
+    });
+    pane.appendChild(row.root);
+  });
+}
+
+function buildArchivePane() {
+  const pane = $('pane-arch');
+  pane.innerHTML = '';
+  CHAPTERS.forEach(function (ch) {
+    const items = LOGS.filter(function (L) { return L.ch === ch.id; });
+    const got = items.filter(function (L) { return hasLog(L.id); }).length;
+    pane.appendChild(el('div', 'list-head', ch.name + '　' + ch.range + '　（' + got + '/' + items.length + '）'));
+    items.forEach(function (L) {
+      const unlocked = hasLog(L.id);
+      const idx = LOGS.indexOf(L);
+      const row = el('div', 'log-item' + (unlocked ? '' : ' locked'));
+      row.appendChild(el('div', 'no', L.id));
+      row.appendChild(el('div', 'tt', unlocked ? L.title : scramble(idx + 7, 16)));
+      row.appendChild(el('div', 'dp', unlocked ? (fmt(L.depth) + 'm') : ('▓▓▓ m')));
+      row.addEventListener('click', function () {
+        Sound.ui();
+        if (unlocked) showLogModal(L, true);
+        else {
+          openModal({
+            title: '加密档案 ' + L.id, sub: 'ENCRYPTED　·　需要深度 ' + fmt(L.depth) + ' m',
+            cls: 'warn',
+            body: '<div class="scramble">' + scramble(idx + 7, 220) + '</div>' +
+                  '<div class="card-note">该档案尚未解锁。继续下潜到 ' + fmt(L.depth) + ' m 即可解码。</div>',
+            buttons: [{ label: '关闭', cls: 'ghost' }]
+          });
+        }
+      });
+      pane.appendChild(row);
+    });
+  });
+
+  pane.appendChild(el('div', 'list-head', '成就'));
+  const grid = el('div', 'ach-grid');
+  ACHIEVEMENTS.forEach(function (a) {
+    const got = !!S.ach[a.id];
+    const c = el('div', 'ach' + (got ? ' got' : ' lock'));
+    c.appendChild(el('div', 'an', (got ? '★ ' : '☆ ') + a.name));
+    c.appendChild(el('div', 'ad', a.desc));
+    grid.appendChild(c);
+  });
+  pane.appendChild(grid);
+  UI.archBuilt = true;
+}
+
+function buildSettingsPane() {
+  const pane = $('pane-set');
+  pane.innerHTML = '';
+
+  /* 音频 */
+  const ac = el('div', 'card');
+  ac.appendChild(el('div', 'card-title', '音频<small>全部由 Web Audio 程序化合成</small>'));
+  const mk = function (label, sub, key) {
+    const row = el('div', 'set-row');
+    row.appendChild(el('div', 'lbl', label + '<small>' + sub + '</small>'));
+    const inp = document.createElement('input');
+    inp.type = 'range'; inp.min = '0'; inp.max = '1'; inp.step = '0.05';
+    inp.value = String(S.settings[key]);
+    inp.addEventListener('input', function () {
+      S.settings[key] = parseFloat(inp.value);
+      Sound.setVolumes();
+      saveGame();
+    });
+    row.appendChild(inp);
+    return row;
+  };
+  ac.appendChild(mk('音效音量', '挖掘 / 购买 / 里程碑 / 日志', 'sfx'));
+  ac.appendChild(mk('BGM 音量', '程序化氛围音乐（drone + 五声音阶）', 'bgm'));
+  const rowM = el('div', 'set-row');
+  rowM.appendChild(el('div', 'lbl', '静音<small>切到后台自动暂停音频</small>'));
+  const btnM = el('button', 'switch' + (S.settings.muted ? ' on' : ''), S.settings.muted ? '已静音' : '开启');
+  btnM.addEventListener('click', function () {
+    S.settings.muted = !S.settings.muted;
+    btnM.classList.toggle('on', S.settings.muted);
+    btnM.textContent = S.settings.muted ? '已静音' : '开启';
+    Sound.setVolumes();
+    saveGame();
+  });
+  rowM.appendChild(btnM);
+  ac.appendChild(rowM);
+  pane.appendChild(ac);
+
+  /* 画质 */
+  const qc = el('div', 'card');
+  qc.appendChild(el('div', 'card-title', '画质<small>影响粒子数量上限</small>'));
+  const rowQ = el('div', 'set-row');
+  rowQ.appendChild(el('div', 'lbl', '粒子预算<small>上限 ' + CONFIG.fx.maxParticles + '，超出复用最老粒子</small>'));
+  const seg = el('div', 'seg');
+  [['low', '低'], ['mid', '中'], ['high', '高']].forEach(function (p) {
+    const b = el('button', 'btn' + (S.settings.quality === p[0] ? ' on' : ''), p[1]);
+    b.addEventListener('click', function () {
+      S.settings.quality = p[0];
+      Array.prototype.forEach.call(seg.children, function (x) { x.classList.remove('on'); });
+      b.classList.add('on');
+      Scene.setQuality(p[0]);
+      saveGame();
+      toast('画质已切换：' + p[1] + '（粒子 ' + (CONFIG.fx.quality[p[0]] || 0) + '）', 'cyan');
+    });
+    seg.appendChild(b);
+  });
+  rowQ.appendChild(seg);
+  qc.appendChild(rowQ);
+
+  // 购买特效开关
+  const rowF = el('div', 'set-row');
+  rowF.appendChild(el('div', 'lbl', '购买特效<small>每种升级 / 建筑有独立光效、粒子与音效</small>'));
+  const btnF = el('button', 'switch' + (S.settings.fx !== false ? ' on' : ''), S.settings.fx !== false ? '华丽' : '精简');
+  btnF.addEventListener('click', function () {
+    S.settings.fx = !(S.settings.fx !== false);
+    btnF.classList.toggle('on', S.settings.fx !== false);
+    btnF.textContent = S.settings.fx !== false ? '华丽' : '精简';
+    Sound.ui();
+    saveGame();
+  });
+  rowF.appendChild(btnF);
+  qc.appendChild(rowF);
+
+  // 逐个预览全部特效，方便调参时确认效果
+  const btnPrev = el('button', 'btn ghost block', '预览全部特效');
+  btnPrev.style.marginTop = '8px';
+  let prevTimer = null;
+  btnPrev.addEventListener('click', function () {
+    const ids = Object.keys(FX_DEFS);
+    let i = 0;
+    if (prevTimer) { clearInterval(prevTimer); prevTimer = null; }
+    prevTimer = setInterval(function () {
+      if (i >= ids.length) { clearInterval(prevTimer); prevTimer = null; return; }
+      FX.play(ids[i], 6);
+      i++;
+    }, 800);
+  });
+  qc.appendChild(btnPrev);
+  pane.appendChild(qc);
+
+  /* 存档 */
+  const sc = el('div', 'card');
+  sc.appendChild(el('div', 'card-title', '存档<small>每 ' + CONFIG.autosaveInterval + ' 秒自动保存</small>'));
+  const rowS = el('div', 'row');
+  const bExp = el('button', 'btn', '导出');
+  const bImp = el('button', 'btn', '导入');
+  const bRst = el('button', 'btn danger', '重置');
+  rowS.appendChild(bExp); rowS.appendChild(bImp); rowS.appendChild(bRst);
+  sc.appendChild(rowS);
+  sc.appendChild(el('div', 'card-note', '导出为一段 base64 文本，可复制到别处粘贴导入（换设备 / 备份）。'));
+  pane.appendChild(sc);
+
+  bExp.addEventListener('click', function () {
+    const data = exportSave();
+    const ta = document.createElement('textarea');
+    ta.value = data;
+    ta.readOnly = true;
+    const wrap = el('div', '');
+    wrap.appendChild(ta);
+    const btnCp = el('button', 'btn block', '复制到剪贴板');
+    btnCp.style.marginTop = '8px';
+    btnCp.addEventListener('click', function () {
+      ta.select();
+      let ok = false;
+      try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+      if (!ok && navigator.clipboard) { navigator.clipboard.writeText(ta.value); ok = true; }
+      toast(ok ? '已复制到剪贴板' : '请手动长按选中复制', 'cyan');
+    });
+    wrap.appendChild(btnCp);
+    openModal({ title: '导出存档', sub: 'BASE64 · ' + data.length + ' 字符', body: wrap,
+      buttons: [{ label: '关闭', cls: 'ghost' }] });
+  });
+  bImp.addEventListener('click', function () {
+    const ta = document.createElement('textarea');
+    ta.placeholder = '在此粘贴 base64 存档文本…';
+    openModal({
+      title: '导入存档', sub: 'PASTE BASE64', body: ta,
+      buttons: [
+        { label: '取消', cls: 'ghost' },
+        { label: '导入', cls: 'primary', onClick: function () {
+            const ok = importSave(ta.value);
+            closeModal();
+            if (ok) {
+              applyTheme(D.layerIdx);
+              Scene.hardResetVisual();
+              Scene.setQuality(S.settings.quality);
+              Sound.setVolumes();
+              buildSettingsPane();        // 重建以同步音量滑块 / 画质按钮状态
+              toast('存档导入成功', 'cyan');
+            } else toast('导入失败：文本无效');
+          } }
+      ]
+    });
+  });
+  bRst.addEventListener('click', function () {
+    openModal({
+      title: '重置存档？', sub: 'IRREVERSIBLE', cls: 'warn',
+      body: '<div class="card-note">将清空深度、金币、矿石、全部建筑与升级、岩芯、档案与成就。<br>此操作不可撤销，建议先导出备份。</div>',
+      buttons: [
+        { label: '取消', cls: 'ghost' },
+        { label: '确认重置', cls: 'danger', onClick: function () {
+            hardReset(); closeModal();
+            applyTheme(0); Scene.hardResetVisual();
+            toast('存档已重置');
+          } }
+      ]
+    });
+  });
+
+  /* 统计 */
+  const st = el('div', 'card');
+  st.appendChild(el('div', 'card-title', '统计'));
+  const statBox = el('div', '');
+  statBox.id = 'statBox';
+  st.appendChild(statBox);
+  pane.appendChild(st);
+}
+
+function refreshStats() {
+  const box = $('statBox');
+  if (!box) return;
+  const rows = [
+    ['游戏时长', fmtTime(S.stats.playTime)],
+    ['挖掘次数', fmt(S.stats.clicks)],
+    ['累计金币', fmt(S.totalCoins)],
+    ['累计矿石', fmt(S.totalOre)],
+    ['最深深度', fmtDepth(S.maxDepth) + ' m'],
+    ['转生次数', fmt(S.prestige)],
+    ['岩芯', fmt(S.cores)],
+    ['永久产能', '×' + S.prodMult.toFixed(2)]
+  ];
+  box.innerHTML = rows.map(function (r) {
+    return '<div class="row"><div class="kv">' + r[0] + '</div><div class="kv"><b>' + r[1] + '</b></div></div>';
+  }).join('');
+}
+
+/* ---------------- 转生确认 ---------------- */
+function confirmPrestige() {
+  const gain = coresGain();
+  openModal({
+    title: '提取岩芯 · 转生', sub: 'CORE EXTRACTION', cls: 'warn',
+    body: '<div class="card-note">' +
+      '本次最深深度 <b>' + fmtDepth(S.maxDepth) + ' m</b> → 获得 <b class="amber">' + gain + '</b> 枚岩芯。<br><br>' +
+      '<b>重置：</b>深度、金币、矿石、全部矿工 / 设施、全部钻探升级。<br>' +
+      '<b>保留：</b>档案日志、成就、转生次数、永久产能、设置。<br><br>' +
+      '转生后岩芯共 ' + (S.cores + gain) + ' 枚：挖掘速度 +' + pct((S.cores + gain) * CONFIG.prestige.speedPerCore) +
+      '、矿石售价 +' + pct((S.cores + gain) * CONFIG.prestige.pricePerCore) + '。</div>',
+    buttons: [
+      { label: '取消', cls: 'ghost' },
+      { label: '确认提取', cls: 'primary', onClick: function () {
+          const g = doPrestige();
+          closeModal();
+          if (g) toast('转生完成：获得 ' + g + ' 枚岩芯，共 ' + S.cores + ' 枚', 'cyan');
+        } }
+    ]
+  });
+}
+
+/* ---------------- HUD ---------------- */
+function rollTo(cur, target, k) {
+  if (!isFinite(target)) return cur;
+  const diff = target - cur;
+  if (Math.abs(diff) < Math.max(0.5, Math.abs(target) * 0.002)) return target;
+  return cur + diff * clamp(k, 0, 1);
+}
+function updateHUD(dt) {
+  const k = clamp(dt * 9, 0, 1);
+  Disp.depth = rollTo(Disp.depth, S.depth, k);
+  Disp.coins = rollTo(Disp.coins, S.coins, k);
+  Disp.ore   = rollTo(Disp.ore,   S.ore,   k);
+  Disp.cps   = rollTo(Disp.cps,   D.cps,   k);
+
+  $('hDepth').textContent = fmtDepth(Disp.depth);
+  $('hCoins').textContent = fmt(Disp.coins);
+  $('hOre').textContent   = fmt(Disp.ore);
+  $('hCps').textContent   = fmt(Disp.cps);
+  $('hCores').textContent = fmt(S.cores);
+  $('hLayer').textContent = D.layer.name;
+  $('hOff').textContent   = fmt(D.cps * 3600);
+  $('digSub').textContent = '+' + fmtDepth(D.clickDepth) + 'm';
+
+  const nl = nextLogInfo();
+  const chip = $('hNextLog');
+  if (nl) {
+    chip.textContent = '下一条日志 ' + fmtDepth(nl.remain) + 'm';
+    chip.classList.toggle('near', nl.remain < 150);
+  } else {
+    chip.textContent = '全部日志已解锁';
+    chip.classList.remove('near');
+  }
+
+  // 矿层进度条
+  const cur = LAYERS[D.layerIdx], nxt = LAYERS[D.layerIdx + 1];
+  const p = nxt ? clamp((S.depth - cur.from) / (nxt.from - cur.from), 0, 1) : 1;
+  $('depthBarFill').style.width = (p * 100).toFixed(1) + '%';
+
+  // 出售卡片
+  const so = $('sellOre'), sp = $('sellPrice'), sr = $('sellRate');
+  if (so) so.textContent = fmt(S.ore);
+  if (sp) sp.textContent = fmt(D.unitPrice);
+  if (sr) sr.textContent = S.autosell ? '自动出售中' : '';
+  const pm = $('preMax'), pg = $('preGain');
+  if (pm) pm.textContent = fmtDepth(S.maxDepth);
+  if (pg) pg.textContent = fmt(coresGain());
+  if (UI._btnPre) UI._btnPre.disabled = !canPrestige();
+}
+
+/* ---------------- 面板刷新 ---------------- */
+function refreshRows() {
+  for (let i = 0; i < UI.rows.length; i++) {
+    const r = UI.rows[i];
+    if (r.update) r.update(r);
+  }
+}
+function refreshAllUI() {
+  refreshRows();
+  if (UI._btnAuto) {
+    UI._btnAuto.classList.toggle('on', S.autosell);
+    UI._btnAuto.textContent = S.autosell ? '自动出售 · 开' : '自动出售 · 关';
+  }
+  updateHUD(0);
+  refreshStats();
+  if (UI.activeTab === 'arch') buildArchivePane();
+}
+
+/* ==========================================================================
+ * §9  主循环与启动
+ * ========================================================================== */
+let lastT = 0, uiAcc = 0, bgmAcc = 0, statAcc = 0;
+
+function frame(now) {
+  requestAnimationFrame(frame);
+  const t = now / 1000;
+  let dt = lastT ? (t - lastT) : 1 / 60;
+  lastT = t;
+
+  if (dt > 1.5) {
+    // 页面曾在后台：按离线规则补算（上限 8 小时）
+    const res = settleOffline(dt);
+    if (res && res.seconds >= CONFIG.offlineMinSec) showOfflineModal(res);
+    dt = 1 / 60;
+  } else {
+    dt = Math.min(Math.max(dt, 0), 0.12);
+  }
+
+  tick(dt);
+  updateHUD(dt);
+  Scene.update(dt);
+  FX.update(dt);
+  tickAutosave(dt);
+
+  uiAcc += dt;
+  if (uiAcc >= 0.2) {
+    uiAcc = 0;
+    recalc();
+    refreshRows();
+    updateDarkness();
+    checkAchievements();
+    if (UI.activeTab === 'arch' && !UI.archBuilt) buildArchivePane();
+  }
+  bgmAcc += dt;
+  if (bgmAcc >= 2) { bgmAcc = 0; Sound.updateBGM(S.depth); }
+  statAcc += dt;
+  if (statAcc >= 1) { statAcc = 0; if (UI.activeTab === 'set') refreshStats(); }
+}
+
+function bindEvents() {
+  const canvas = $('gl');
+
+  // 点击画面挖掘
+  canvas.addEventListener('pointerdown', function (e) {
+    ensureAudio();
+    dig(e.clientX, e.clientY);
+  });
+  $('digBtn').addEventListener('pointerdown', function (e) {
+    e.preventDefault();
+    ensureAudio();
+    const r = $('digBtn').getBoundingClientRect();
+    $('digBtn').classList.remove('pulse'); void $('digBtn').offsetWidth; $('digBtn').classList.add('pulse');
+    dig(r.left + r.width / 2, r.top + r.height / 2);
+  });
+
+  // 标签页
+  Array.prototype.forEach.call(document.querySelectorAll('.tab'), function (tab) {
+    tab.addEventListener('click', function () {
+      Sound.ui();
+      Array.prototype.forEach.call(document.querySelectorAll('.tab'), function (x) { x.classList.remove('active'); });
+      tab.classList.add('active');
+      Array.prototype.forEach.call(document.querySelectorAll('.tabpane'), function (p) { p.classList.remove('active'); });
+      UI.activeTab = tab.getAttribute('data-tab');
+      $('pane-' + UI.activeTab).classList.add('active');
+      if (UI.activeTab === 'arch') buildArchivePane();
+      if (UI.activeTab === 'set') refreshStats();
+    });
+  });
+
+  // 窗口尺寸
+  let rzTimer = null;
+  window.addEventListener('resize', function () {
+    if (rzTimer) clearTimeout(rzTimer);
+    rzTimer = setTimeout(function () { Scene.resize(); }, 120);
+  });
+  window.addEventListener('orientationchange', function () {
+    setTimeout(function () { Scene.resize(); }, 350);
+  });
+
+  // 后台暂停音频
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) { Sound.suspend(); saveGame(); }
+    else { lastT = 0; Sound.resume(); }
+  });
+  window.addEventListener('pagehide', saveGame);
+  window.addEventListener('beforeunload', saveGame);
+}
+
+/* 首次交互后启动音频上下文 */
+let audioReady = false;
+function ensureAudio() {
+  if (audioReady) return;
+  audioReady = true;
+  if (!Sound.init()) return;
+  Sound.setVolumes();
+  if (!S.settings.muted) Sound.startBGM();
+  ['pointerdown', 'keydown', 'touchstart'].forEach(function (ev) {
+    window.removeEventListener(ev, ensureAudio);
+  });
+}
+
+function boot() {
+  const hadSave = loadGame();
+  recalc();
+  S.layerIdx = layerIndex(S.depth);      // 避免开局误触发里程碑
+
+  const canvas = $('gl');
+  const ok3d = Scene.init(canvas);
+  if (!ok3d) {
+    console.warn('[ABYSS] 3D 场景不可用，游戏逻辑继续运行');
+    const msg = el('div', 'card-note', '当前环境不支持 WebGL，3D 画面已停用，但玩法与数值仍可正常进行。');
+    msg.style.cssText = 'position:absolute;top:45%;left:0;right:0;text-align:center;padding:0 24px;';
+    $('app').appendChild(msg);
+  } else {
+    Scene.hardResetVisual();
+  }
+  FX.init();
+
+  UI.rows = [];
+  UI.activeTab = 'drill';
+  buildDrillPane();
+  buildCrewPane();
+  buildArchivePane();
+  buildSettingsPane();
+
+  applyTheme(D.layerIdx);
+  refreshAllUI();
+
+  // 离线结算
+  if (hadSave) {
+    const elapsed = (Date.now() - (S.stats.lastSave || Date.now())) / 1000;
+    if (elapsed >= CONFIG.offlineMinSec) {
+      const res = settleOffline(elapsed);
+      if (res) {
+        checkLayer();
+        showOfflineModal(res);
+      }
+    }
+  }
+  checkAchievements();
+  bindEvents();
+  if (S.migrated) {
+    setTimeout(function () {
+      toast('数值平衡已更新：经济进度重置，档案 / 成就 / 岩芯保留', 'cyan');
+    }, 1200);
+    S.migrated = false;
+  }
+  ['pointerdown', 'keydown', 'touchstart'].forEach(function (ev) {
+    window.addEventListener(ev, ensureAudio, { passive: true });
+  });
+
+  $('boot').classList.add('hidden');
+  requestAnimationFrame(frame);
+
+  if (!hadSave) {
+    setTimeout(function () {
+      toast('点击井壁或右下角按钮开始挖掘', 'cyan');
+    }, 700);
+  }
+}
+
+/* 暴露给 index.html 的启动接口（同时方便调试与离线数值模拟） */
+window.ABYSS = {
+  boot: boot,
+  get state() { return S; },
+  get derived() { return D; },
+  CONFIG: CONFIG, LOGS: LOGS, LAYERS: LAYERS, BUILDINGS: BUILDINGS, UPGRADES: UPGRADES,
+  FX: FX, FX_DEFS: FX_DEFS,
+  save: saveGame, load: loadGame, export: exportSave, import: importSave,
+  addCoins: function (n) { S.coins += n; recalc(); },
+  warp: function (d) { S.depth = d; if (d > S.maxDepth) S.maxDepth = d; recalc(); checkLogs(); },
+  /* 调试 / 数值模拟：可直接复用游戏内的真实公式跑平衡测试 */
+  debug: {
+    recalc: recalc, advance: advance, grantReward: grantReward,
+    buyBuilding: buyBuilding, buyUpgrade: buyUpgrade,
+    buildingCost: buildingCost, upgradeCost: upgradeCost,
+    buildingMax: buildingMax, upgradeMax: upgradeMax,
+    coresGain: coresGain, layerIndex: layerIndex, resistance: resistance,
+    get D() { return D; }, UI: UI, Scene: Scene, FX: FX
+  }
+};
+
+})();
+}
+</script>
+<script>
+/* ==========================================================================
+   引导器：按顺序尝试 CDN 载入 Three.js（UMD 构建，兼容 file:// 直接双击打开），
+   全部失败后提示用户。Three.js 就绪后执行内联的主程序并启动游戏。
+   如想完全离线运行：把下面 CDN 数组的第一项改成本地 three.min.js 的路径。
+   ========================================================================== */
+(function () {
+  var BOOT = document.getElementById('boot');
+  var MSG  = document.getElementById('bootMsg');
+
+  var CDN = [
+    'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js',
+    'https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js',
+    'https://unpkg.com/three@0.149.0/build/three.min.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js'
+  ];
+  var i = 0;
+
+  function loadNext() {
+    if (window.THREE) return startMain();
+    if (i >= CDN.length) return fail('无法载入 Three.js');
+    var url = CDN[i++];
+    MSG.textContent = '正在载入 3D 引擎… (' + i + '/' + CDN.length + ')';
+    var s = document.createElement('script');
+    s.src = url;
+    s.async = false;
+    s.onload  = function () { window.THREE ? startMain() : loadNext(); };
+    s.onerror = loadNext;
+    document.head.appendChild(s);
+  }
+
+  function startMain() {
+    MSG.textContent = '正在启动…';
+    try {
+      __ABYSS_MAIN__();                       // 执行内联主程序（注册 window.ABYSS）
+      if (window.ABYSS && window.ABYSS.boot) window.ABYSS.boot();
+      else fail('主程序未导出启动接口');
+    } catch (e) {
+      fail('启动异常：' + (e && e.message ? e.message : e));
+      console.error(e);
+    }
+  }
+
+  function fail(msg) {
+    BOOT.classList.remove('hidden');
+    BOOT.classList.add('boot-error');
+    MSG.innerHTML = msg +
+      '<div class="boot-tip">本作通过 CDN 载入 Three.js，请确认网络连通；' +
+      '若需完全离线，请把本文件中 CDN 数组第一项改成本地 three.min.js 的路径。</div>';
+  }
+  window.__ABYSS_FAIL = fail;
+
+  loadNext();
+})();
+</script>
+
+</body>
+</html>
