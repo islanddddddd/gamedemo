@@ -1,0 +1,11 @@
+{
+  "name": "game-hub",
+  "version": "1.0.0",
+  "private": true,
+  "description": "游戏中枢：聚合多个独立游戏 demo 的导航站",
+  "scripts": {
+    "start": "node hub-server.js",
+    "build": "node build-games.js",
+    "vercel-build": "node build-games.js"
+  }
+}

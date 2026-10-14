@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#b3a37a">
+<title>荒原</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- 那片地 -->
+<canvas id="stage"></canvas>
+
+<!-- 能藏就藏的界面 -->
+<div id="ui">
+
+  <!-- 左上角：季节与昼夜。没有文字，没有数字，只有一个点 -->
+  <div id="clock" title="季节与昼夜"></div>
+
+  <!-- 一句话提示，说完就淡掉 -->
+  <div id="toast"></div>
+
+  <!-- 最开始的引导 -->
+  <div id="hint">在这片地上，放下第一颗种子</div>
+
+  <!-- 手边的东西 -->
+  <div id="seedbar"></div>
+
+  <!-- 角落里的小按钮 -->
+  <div id="corner">
+    <button id="btnSound" title="声音（S）">♪</button>
+    <button id="btnHide" title="藏起界面（H）">◻</button>
+    <button id="btnReset" title="换一片荒原，重新开始">↺</button>
+  </div>
+
+</div>
+
+<!-- 第一次进来时的门（浏览器要求：出声之前得先有一次交互） -->
+<div id="gate">
+  <div class="gate-inner">
+    <h1>荒　原</h1>
+    <p>这里什么都没有。</p>
+    <p class="sub">你只能做一件事：放下种子。<br>剩下的交给时间。</p>
+    <button id="btnBegin">开始</button>
+    <p class="tiny">建议戴上耳机。风声会告诉你这片地有没有变好。</p>
+  </div>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/utils.js"></script>
+<script src="js/world.js"></script>
+<script src="js/life.js"></script>
+<script src="js/animals.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/render.js"></script>
+<script src="js/storage.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

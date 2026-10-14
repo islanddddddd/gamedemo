@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>枯山水</title>
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+<canvas id="stage"></canvas>
+
+<!-- 着色器/初始化出错时显示，避免只有一片黑 -->
+<pre id="glerr"></pre>
+
+<!-- 右上角：几个极淡的字，鼠标靠近才显形 -->
+<div class="corner" id="corner">
+  <button data-act="flat">推平</button>
+  <button data-act="sound">声</button>
+  <button data-act="light">光</button>
+  <button data-act="border">缘</button>
+  <button data-act="gardens">庭院</button>
+  <button data-act="params">参数</button>
+</div>
+
+<!-- 底部：鼠标靠近底边才浮出的物件栏 -->
+<div class="palette" id="palette"></div>
+
+<!-- 极轻的命名条 -->
+<div class="savebar" id="savebar">
+  <input id="nameInput" type="text" placeholder="给这座庭院起个名字（可留空）" maxlength="24" />
+  <button data-act="save">留下来</button>
+  <button data-act="later">再看看</button>
+</div>
+
+<!-- 保存下来的庭院，安静地排成一列 -->
+<div class="gallery" id="gallery">
+  <div class="gInner" id="gInner"></div>
+  <div class="gClose"><button data-act="closeG">收起</button></div>
+</div>
+
+<!-- 参数面板（右上角"参数"，或按 P） -->
+<div class="panel" id="panel"></div>
+
+<div class="toast" id="toast"></div>
+
+<script src="vendor/three.min.js"></script>
+<script src="js/params.js"></script>
+<script src="js/noise.js"></script>
+<script src="js/facet.js"></script>
+<script src="js/shaders.js"></script>
+<script src="js/sand.js"></script>
+<script src="js/objects.js"></script>
+<script src="js/scene.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

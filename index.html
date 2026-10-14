@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>游戏中枢 · Game Hub</title>
+  <link rel="stylesheet" href="hub.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='24'>🎮</text></svg>" />
+</head>
+<body>
+  <!-- 统一导航栏：始终存在，点击「主菜单」返回 -->
+  <nav class="navbar">
+    <div class="brand">🎮 游戏中枢</div>
+    <button id="homeBtn" class="nav-btn" type="button">← 主菜单</button>
+  </nav>
+
+  <!-- 主菜单：自动扫描出的游戏入口网格 -->
+  <main id="home" class="home">
+    <header class="hero">
+      <h1>我的游戏库</h1>
+      <p>选择一款，直接进入 · 全部在同一站点内无缝切换</p>
+    </header>
+    <section id="grid" class="grid"></section>
+  </main>
+
+  <!-- 游戏舞台：加载选中游戏的独立 iframe -->
+  <section id="stage" class="stage hidden">
+    <div id="loader" class="loader">
+      <div class="spinner"></div>
+      <span>加载中…</span>
+    </div>
+    <iframe id="frame" title="game" allow="autoplay; fullscreen"></iframe>
+  </section>
+
+  <script src="hub.js"></script>
+</body>
+</html>

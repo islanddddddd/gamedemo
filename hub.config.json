@@ -1,0 +1,18 @@
+{
+  "微缩水境": {
+    "title": "微缩水境",
+    "description": "鱼缸生态模拟 · Aquascape —— 在指尖养一座会呼吸的水下世界",
+    "review": "还行"
+  },
+  "游戏demo荒原": {
+    "title": "荒原",
+    "description": "种下一颗种子，剩下的交给时间 —— 一片会生长、会呼吸的土地",
+    "review": "纯答辩"
+  },
+  "游戏demo之枯山水": {
+    "title": "枯山水",
+    "description": "用沙与石，造一座只属于此刻的庭院",
+    "thumbnail": "preview.png",
+    "review": "纯答辩"
+  }
+}

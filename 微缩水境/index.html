@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>微缩水境 · Aquascape — 鱼缸生态模拟</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🐟</text></svg>" />
+  <!-- Three.js r0.160（已内置到 lib/，零外部网络依赖） -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "./lib/three.module.js",
+      "three/addons/": "./lib/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <!-- 3D 场景画布 -->
+  <canvas id="scene"></canvas>
+
+  <!-- UI 层（由 ui.js 动态构建） -->
+  <div id="ui-root"></div>
+
+  <!-- 加载 / 失败提示 -->
+  <div id="boot">
+    <div class="boot-inner">
+      <div class="boot-fish">🐟</div>
+      <div class="boot-title">微缩水境 · Aquascape</div>
+      <div class="boot-sub">正在注入生命之流……</div>
+      <div class="boot-err hidden">
+        <b>需要通过本地服务器打开</b>（浏览器禁止 file:// 加载 ES Module）<br /><br />
+        <b>最简单的方式：</b>双击项目目录下的 <code>start.bat</code><br /><br />
+        或手动执行任一命令后访问 <code>http://127.0.0.1:8899</code>：<br />
+        <code>python -m http.server 8899</code><br />
+        <code>node server.js</code>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // file:// 协议直接给出明确指引（ES Module 无法从本地文件加载）
+    window.__AQUA_OK__ = false;
+    if (location.protocol === 'file:') {
+      document.querySelector('.boot-sub').textContent = '加载方式不正确';
+      document.querySelector('.boot-err').classList.remove('hidden');
+    }
+  </script>
+  <script type="module">
+    import('./js/main.js').then((m) => {
+      if (m && m.bootOk) {
+        window.__AQUA_OK__ = true;
+        const boot = document.getElementById('boot');
+        boot.classList.add('done');
+        setTimeout(() => boot.remove(), 700);
+      }
+    }).catch((err) => {
+      console.error('[Aquascape] 模块加载失败：', err);
+      document.querySelector('.boot-sub').textContent = '资源加载失败';
+      document.querySelector('.boot-err').classList.remove('hidden');
+    });
+  </script>
+</body>
+</html>

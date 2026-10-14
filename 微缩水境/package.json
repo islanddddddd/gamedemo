@@ -1,0 +1,10 @@
+{
+  "name": "aquascape-diorama",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "微缩水境 · Aquascape — Three.js 鱼缸生态模拟 Demo",
+  "scripts": {
+    "start": "npx serve ."
+  }
+}
