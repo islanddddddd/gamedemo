@@ -1,0 +1,1576 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>晨间萃取 · MORNING EXTRACTION</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='26' font-size='26'%3E%E2%98%95%3C/text%3E%3C/svg%3E">
+<style>
+  :root{
+    --ink:#2a2230;
+    --cream:#f6ead8;
+    --amber:#e8a24a;
+    --amber-soft:#f4c98b;
+    --wood:#c08d5c;
+    --glass:rgba(34,26,24,.52);
+    --glass-line:rgba(255,224,190,.16);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;overflow:hidden;background:#1b1620}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans SC",sans-serif;
+    color:var(--cream);
+    -webkit-font-smoothing:antialiased;
+    letter-spacing:.02em;
+  }
+  #app{position:fixed;inset:0}
+  canvas{display:block;width:100%;height:100%}
+
+  /* ---------- HUD ---------- */
+  #hud{position:fixed;inset:0;pointer-events:none;z-index:10}
+  .card{
+    background:var(--glass);
+    border:1px solid var(--glass-line);
+    border-radius:20px;
+    backdrop-filter:blur(14px) saturate(1.25);
+    -webkit-backdrop-filter:blur(14px) saturate(1.25);
+    box-shadow:0 18px 40px rgba(0,0,0,.32), inset 0 1px 0 rgba(255,255,255,.10);
+  }
+
+  /* 顶部状态条 */
+  #topbar{
+    position:absolute;top:22px;left:22px;right:22px;
+    display:flex;justify-content:space-between;align-items:flex-start;gap:16px;
+  }
+  .stat{display:flex;align-items:center;gap:10px;padding:10px 16px;font-size:13px;line-height:1}
+  .stat .k{opacity:.55;font-size:11px;letter-spacing:.14em}
+  .stat .v{font-size:17px;font-weight:600;font-variant-numeric:tabular-nums}
+  .stat-row{display:flex;gap:10px;flex-wrap:wrap}
+  #clock .v{color:var(--amber-soft)}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--amber);box-shadow:0 0 10px var(--amber)}
+
+  /* 客户气泡 */
+  #order{
+    position:absolute;left:50%;top:96px;transform:translate(-50%,-14px);
+    min-width:270px;max-width:min(560px,86vw);padding:18px 22px 18px 22px;
+    opacity:0;transition:opacity .5s ease,transform .5s cubic-bezier(.2,.8,.3,1);
+  }
+  #order.show{opacity:1;transform:translate(-50%,0)}
+  #order .who{display:flex;align-items:center;gap:10px;font-size:12px;letter-spacing:.12em;opacity:.6;margin-bottom:9px}
+  #order .who .tag{padding:3px 9px;border-radius:999px;border:1px solid var(--glass-line);font-size:11px;opacity:.9}
+  #order .say{font-size:19px;line-height:1.5;font-weight:500}
+  #order .note{margin-top:8px;font-size:12px;opacity:.5;line-height:1.5}
+
+  /* 底部操作台 */
+  #dock{
+    position:absolute;left:50%;bottom:26px;transform:translateX(-50%);
+    width:min(680px,92vw);padding:16px 20px 18px;
+    display:flex;flex-direction:column;gap:12px;
+    pointer-events:auto;
+    transition:opacity .35s ease, transform .35s ease;
+  }
+  #dock.hide{opacity:0;transform:translateX(-50%) translateY(16px);pointer-events:none}
+  .dock-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+  .step-name{font-size:13px;letter-spacing:.16em;opacity:.62}
+  .hint{font-size:13.5px;opacity:.82;line-height:1.45}
+  .hint b{color:var(--amber-soft);font-weight:600}
+
+  .btn{
+    pointer-events:auto;cursor:pointer;user-select:none;
+    border:1px solid rgba(255,222,180,.28);
+    background:linear-gradient(180deg,rgba(255,214,160,.20),rgba(255,190,120,.08));
+    color:var(--cream);border-radius:14px;padding:12px 20px;font-size:15px;font-weight:600;
+    letter-spacing:.08em;transition:transform .12s ease,filter .18s ease,background .18s ease;
+    font-family:inherit;
+  }
+  .btn:hover{filter:brightness(1.15)}
+  .btn:active{transform:scale(.97)}
+  .btn.primary{
+    background:linear-gradient(180deg,#f0b45f,#d98a34);
+    color:#2b1c0e;border-color:rgba(255,235,200,.5);
+    box-shadow:0 10px 26px rgba(232,162,74,.32);
+  }
+  .btn.ghost{background:rgba(255,255,255,.05);border-color:rgba(255,235,205,.18);font-weight:500}
+  .btn[disabled]{opacity:.35;pointer-events:none}
+  .btn-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+
+  /* 秤 */
+  .scale{
+    display:flex;align-items:center;gap:14px;padding:10px 16px;border-radius:14px;
+    background:rgba(12,9,8,.42);border:1px solid rgba(255,222,180,.12);
+  }
+  .scale .label{font-size:11px;letter-spacing:.14em;opacity:.5}
+  .scale .num{font-size:30px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1;
+    color:#ffe6bd;text-shadow:0 0 18px rgba(255,190,110,.35)}
+  .scale .unit{font-size:12px;opacity:.5;margin-left:2px}
+
+  /* 研磨旋钮条 */
+  .knobrow{display:flex;align-items:center;gap:14px}
+  .knobrow input[type=range]{flex:1;-webkit-appearance:none;appearance:none;height:6px;border-radius:99px;outline:none}
+  .grindmeter{
+    flex:1;height:6px;border-radius:99px;position:relative;overflow:visible;
+    background:linear-gradient(90deg,#5d4a5f,#8a6a4e 42%,#e0b273 72%,#f2ddb6 100%);
+  }
+  .grindmeter .pin{position:absolute;top:50%;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;
+    background:#ffdca7;box-shadow:0 0 0 3px rgba(0,0,0,.28),0 0 14px rgba(255,190,110,.7);left:50%}
+  .grindmeter .lbl{position:absolute;top:12px;font-size:10px;opacity:.42;letter-spacing:.1em}
+  .tone{font-size:11px;opacity:.55;letter-spacing:.1em;min-width:76px;text-align:right}
+
+  /* 结果卡 */
+  #result{
+    position:absolute;left:50%;top:50%;transform:translate(-50%,-46%) scale(.97);
+    width:min(430px,88vw);padding:26px 28px;opacity:0;pointer-events:none;
+    transition:opacity .45s ease,transform .45s cubic-bezier(.2,.8,.3,1);
+  }
+  #result.show{opacity:1;transform:translate(-50%,-50%) scale(1);pointer-events:auto}
+  #result .verdict{font-size:26px;font-weight:700;letter-spacing:.04em;margin-bottom:4px}
+  #result .flavor{font-size:13.5px;opacity:.72;margin-bottom:16px;line-height:1.6}
+  #result .quote{font-size:15px;line-height:1.65;padding:14px 16px;border-radius:14px;
+    background:rgba(255,255,255,.055);border:1px solid rgba(255,225,190,.10)}
+  #result .quote .who{display:block;font-size:11px;opacity:.5;letter-spacing:.12em;margin-bottom:6px}
+  #result .tip{margin-top:14px;font-size:12px;opacity:.55;line-height:1.6}
+  #result .btn{margin-top:18px;width:100%}
+  .stars{letter-spacing:.22em;color:var(--amber);font-size:15px;margin-bottom:10px}
+
+  /* 横幅提示 */
+  #banner{
+    position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+    font-size:34px;font-weight:700;letter-spacing:.28em;opacity:0;
+    text-shadow:0 8px 40px rgba(0,0,0,.6);transition:opacity .6s ease;text-align:center;
+  }
+  #banner.show{opacity:1}
+  #banner small{display:block;font-size:12px;letter-spacing:.34em;opacity:.55;margin-top:14px;font-weight:400}
+
+  /* 开场 */
+  #intro{
+    position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:8px;background:radial-gradient(120% 90% at 50% 40%,rgba(30,22,18,.22),rgba(18,14,18,.66));
+    backdrop-filter:blur(3px);pointer-events:auto;transition:opacity .8s ease;
+  }
+  #intro.out{opacity:0;pointer-events:none}
+  #intro h1{margin:0;font-size:clamp(38px,7.4vw,74px);font-weight:700;letter-spacing:.34em;
+    text-indent:.34em;background:linear-gradient(180deg,#fff3df,#e0a15c);-webkit-background-clip:text;
+    background-clip:text;color:transparent}
+  #intro .en{font-size:12px;letter-spacing:.5em;opacity:.5;text-indent:.5em;margin-bottom:22px}
+  #intro p{margin:0;max-width:min(520px,84vw);text-align:center;font-size:14.5px;line-height:1.85;opacity:.72}
+  #intro .rule{margin-top:26px;font-size:12px;opacity:.45;letter-spacing:.06em;line-height:1.9;text-align:center}
+  #intro .btn{margin-top:30px;padding:14px 40px;font-size:16px;letter-spacing:.22em}
+  .kbd{display:inline-block;padding:1px 7px;border-radius:6px;border:1px solid rgba(255,230,200,.24);
+    font-size:11px;opacity:.85;margin:0 2px}
+
+  /* 帮助 */
+  #helpBtn{position:absolute;right:22px;bottom:26px;width:38px;height:38px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;font-size:15px;pointer-events:auto;cursor:pointer}
+  #help{position:absolute;inset:0;display:none;align-items:center;justify-content:center;pointer-events:auto}
+  #help.show{display:flex}
+  #help .box{width:min(560px,90vw);padding:26px 28px;max-height:80vh;overflow:auto}
+  #help h3{margin:0 0 14px;font-size:16px;letter-spacing:.2em}
+  #help ul{margin:0;padding-left:18px;font-size:13.5px;line-height:1.95;opacity:.82}
+  #help .btn{margin-top:20px}
+
+  #loading{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+    background:#1b1620;z-index:50;font-size:12px;letter-spacing:.3em;opacity:.6;transition:opacity .5s}
+  #loading.out{opacity:0;pointer-events:none}
+
+  @media (max-width:640px){
+    #topbar{top:14px;left:14px;right:14px}
+    .stat{padding:8px 12px}
+    #order{top:88px;padding:14px 18px}
+    #order .say{font-size:17px}
+    #dock{bottom:14px;padding:14px 16px}
+    .scale .num{font-size:26px}
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<div id="hud">
+  <div id="topbar">
+    <div class="stat-row">
+      <div class="stat card"><span class="dot"></span><span class="k">第</span><span class="v" id="dayNum">1</span><span class="k">天</span></div>
+      <div class="stat card" id="clock"><span class="k">时段</span><span class="v" id="clockVal">06:40</span></div>
+    </div>
+    <div class="stat-row">
+      <div class="stat card"><span class="k">今日杯数</span><span class="v" id="cupNum">0</span></div>
+      <div class="stat card"><span class="k">小费罐</span><span class="v">¥<span id="tipNum">0</span></span></div>
+    </div>
+  </div>
+
+  <div id="order" class="card">
+    <div class="who"><span id="custType">常客</span><span class="tag" id="custTag">熟面孔</span></div>
+    <div class="say" id="orderSay">来杯提神的。</div>
+    <div class="note" id="orderNote"></div>
+  </div>
+
+  <div id="dock" class="card">
+    <div class="dock-head">
+      <span class="step-name" id="stepName">准备</span>
+      <span class="tone" id="toneVal"></span>
+    </div>
+    <div class="hint" id="hintText">按下开始营业</div>
+    <div id="slotA"></div>
+    <div id="slotB"></div>
+    <div class="btn-row" id="slotC"></div>
+  </div>
+
+  <div id="result" class="card">
+    <div class="stars" id="rStars"></div>
+    <div class="verdict" id="rVerdict">刚好</div>
+    <div class="flavor" id="rFlavor">甜感、余韵长</div>
+    <div class="quote"><span class="who" id="rWho">常客</span><span id="rQuote">……</span></div>
+    <div class="tip" id="rTip"></div>
+    <button class="btn primary" id="rNext">下一位</button>
+  </div>
+
+  <div id="banner"></div>
+
+  <div id="helpBtn" class="card">?</div>
+  <div id="help">
+    <div class="box card">
+      <h3>怎么玩</h3>
+      <ul>
+        <li>转<b>磨豆机旋钮</b>调研磨度——听音调，看粉的粗细。</li>
+        <li>按住<b>倒豆</b>看电子秤，松开后<b>刮平</b>。</li>
+        <li><b>压粉</b>：按住蓄力，到合适的力度松手。</li>
+        <li><b>萃取</b>：只看液柱颜色和秤上的克数，在对的时刻<b>切断</b>。</li>
+        <li>蜂蜜般细流、金棕渐变 = 刚好。早了酸，晚了苦。</li>
+        <li>每天豆子都会<b>漂移</b>，昨天的手感今天已经不对了。</li>
+      </ul>
+      <button class="btn ghost" id="helpClose">知道了</button>
+    </div>
+  </div>
+
+  <div id="intro">
+    <h1>晨间萃取</h1>
+    <div class="en">MORNING EXTRACTION</div>
+    <p>你是咖啡师。每天早上开门前你必须重新调磨——因为昨天的手感，今天已经不对了。<br>你靠眼睛看液柱、耳朵听声音、手称重量，把每一杯调到那个说不清的"刚刚好"。</p>
+    <div class="rule">
+      不显示任何参数面板 · 判断全靠液柱与 Crema · 每天的答案都不一样<br>
+      <span class="kbd">空格</span>切断萃取 <span class="kbd">拖拽</span>转动视角 <span class="kbd">H</span>帮助
+    </div>
+    <button class="btn primary" id="startBtn">开门营业</button>
+  </div>
+</div>
+
+<div id="loading">正在磨豆…</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three.module.js",
+    "three-cdn": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+  }
+}
+</script>
+
+<script type="module">
+// ============================================================
+//  《晨间萃取》单页 Demo  —  three.js 风格化渲染 + 手感萃取模拟
+// ============================================================
+let THREE;
+try { THREE = await import('three'); }
+catch (e) { THREE = await import('three-cdn'); }
+setTimeout(()=>{ const l=$('loading'); if(l && !l.classList.contains('out')) l.textContent = '正在联机加载渲染引擎…'; }, 3500);
+
+/* ============================== 工具 ============================== */
+const clamp = (v,a,b)=>Math.min(b,Math.max(a,v));
+const lerp  = (a,b,t)=>a+(b-a)*t;
+const smoothstep=(e0,e1,x)=>{const t=clamp((x-e0)/(e1-e0),0,1);return t*t*(3-2*t);};
+const rand  = (a,b)=>a+Math.random()*(b-a);
+const $ = id=>document.getElementById(id);
+
+/* ====================== 卡通渲染：阶梯渐变贴图 ====================== */
+function makeGradientMap(steps=4, cool=false){
+  const data = new Uint8Array(steps);
+  for(let i=0;i<steps;i++){
+    const t = i/(steps-1);
+    // 亮部暖、暗部偏冷紫，硬边过渡
+    const v = Math.pow(t, .70);
+    data[i] = Math.round(lerp(cool?62:84, 255, v));
+  }
+  const tex = new THREE.DataTexture(data, steps, 1, THREE.RedFormat);
+  tex.minFilter = tex.magFilter = THREE.NearestFilter;
+  tex.needsUpdate = true;
+  return tex;
+}
+const GRAD = makeGradientMap(4);
+const GRAD_SOFT = makeGradientMap(5);
+
+/* ====================== 圆角盒 / 车削 几何 ====================== */
+function roundedBox(w,h,d,r=0.08,seg=3){
+  const s = new THREE.Shape();
+  const W=w/2, H=h/2, R=Math.min(r,W,H);
+  s.moveTo(-W+R,-H);
+  s.lineTo(W-R,-H); s.quadraticCurveTo(W,-H,W,-H+R);
+  s.lineTo(W,H-R);  s.quadraticCurveTo(W,H,W-R,H);
+  s.lineTo(-W+R,H); s.quadraticCurveTo(-W,H,-W,H-R);
+  s.lineTo(-W,-H+R);s.quadraticCurveTo(-W,-H,-W+R,-H);
+  const g = new THREE.ExtrudeGeometry(s,{depth:d-2*R,bevelEnabled:true,bevelSize:R,bevelThickness:R,bevelSegments:seg,curveSegments:6});
+  g.translate(0,0,-(d)/2 + R*0);
+  g.center();
+  return g;
+}
+function lathe(points, seg=48){
+  return new THREE.LatheGeometry(points.map(p=>new THREE.Vector2(p[0],p[1])), seg);
+}
+
+/* ====================== 材质工厂 ====================== */
+const toonMats = [];
+function toon(color, opts={}){
+  const m = new THREE.MeshToonMaterial({
+    color: new THREE.Color(color),
+    gradientMap: opts.soft?GRAD_SOFT:GRAD,
+    transparent: !!opts.opacity,
+    opacity: opts.opacity ?? 1,
+    side: opts.side ?? THREE.FrontSide,
+  });
+  if(opts.emissive){ m.emissive = new THREE.Color(opts.emissive); }
+  toonMats.push(m);
+  return m;
+}
+/* 描边：背面外扩 */
+const OUTLINE_COLOR = 0x2b2130;
+function outline(mesh, scale=1.035){
+  const m = new THREE.Mesh(mesh.geometry, new THREE.MeshBasicMaterial({
+    color: OUTLINE_COLOR, side: THREE.BackSide
+  }));
+  m.scale.multiplyScalar(scale);
+  m.position.copy(mesh.position);
+  m.rotation.copy(mesh.rotation);
+  mesh.add(m);
+  return m;
+}
+function addOutline(scale=1.03, minSize=0.02){
+  return (obj)=>{
+    const list = [];
+    obj.traverse(o=>{
+      if(!o.isMesh || o.userData.noOutline) return;
+      const m = o.material;
+      if(m && m.transparent && (m.opacity ?? 1) < 0.92) return;   // 半透明不描边
+      list.push(o);
+    });
+    list.forEach(o=>{
+      o.geometry.computeBoundingSphere();
+      const r = o.geometry.boundingSphere ? o.geometry.boundingSphere.radius : 0.2;
+      if(r < minSize) return;
+      outline(o, scale);
+    });
+  };
+}
+
+/* ====================== 噪声函数（GLSL 片段） ====================== */
+const GLSL_NOISE = `
+  float hash21(vec2 p){ p = fract(p*vec2(123.34,456.21)); p += dot(p,p+45.32); return fract(p.x*p.y); }
+  float vnoise(vec2 p){
+    vec2 i = floor(p), f = fract(p);
+    vec2 u = f*f*(3.0-2.0*f);
+    float a = hash21(i), b = hash21(i+vec2(1,0)), c = hash21(i+vec2(0,1)), d = hash21(i+vec2(1,1));
+    return mix(mix(a,b,u.x), mix(c,d,u.x), u.y);
+  }
+  float fbm(vec2 p){
+    float v = 0.0, a = 0.5;
+    for(int i=0;i<4;i++){ v += a*vnoise(p); p *= 2.03; a *= 0.5; }
+    return v;
+  }
+`;
+
+/* ====================== 液柱 shader（核心玩法界面） ====================== */
+function makeStreamMaterial(){
+  return new THREE.ShaderMaterial({
+    transparent:true, depthWrite:false, side:THREE.DoubleSide,
+    uniforms:{
+      uTime:{value:0}, uFlow:{value:0.5}, uProg:{value:0},
+      uBreak:{value:0}, uSplash:{value:0}, uOpacity:{value:1},
+      uColDeep:{value:new THREE.Color('#2b1a11')},
+      uColGold:{value:new THREE.Color('#b8702c')},
+      uColPale:{value:new THREE.Color('#e8c58a')},
+      uHue:{value:0.5}
+    },
+    vertexShader:`
+      varying vec2 vUv; varying vec3 vN; varying vec3 vView;
+      void main(){
+        vUv = uv; vN = normalize(normalMatrix*normal);
+        vec4 mv = modelViewMatrix*vec4(position,1.0);
+        vView = normalize(-mv.xyz);
+        gl_Position = projectionMatrix*mv;
+      }`,
+    fragmentShader:`
+      varying vec2 vUv; varying vec3 vN; varying vec3 vView;
+      uniform float uTime,uFlow,uProg,uBreak,uSplash,uOpacity,uHue;
+      uniform vec3 uColDeep,uColGold,uColPale;
+      ${GLSL_NOISE}
+      void main(){
+        float y = vUv.y;              // 0 杯口(底) → 1 出水口(顶)
+        // —— 三段硬边色带：深棕 → 金棕 → 浅黄，由流速与进度共同决定
+        float t = clamp(uHue, 0.0, 1.0);
+        vec3 col;
+        float q = floor(t*3.0)/3.0;
+        if(t < 0.33)      col = mix(uColDeep, mix(uColDeep,uColGold,.5), smoothstep(0.0,0.33,t));
+        else if(t < 0.66) col = mix(mix(uColDeep,uColGold,.5), uColGold, smoothstep(0.33,0.66,t));
+        else              col = mix(uColGold, uColPale, smoothstep(0.66,1.0,t));
+        // 液柱顶部(刚出)更深，尾部更浅
+        col = mix(col*0.86, col*1.10, smoothstep(0.15,0.95,y));
+        // —— 流动高光带
+        float sp = 3.0 + uFlow*16.0;
+        float band = sin((y*13.0 - uTime*sp)*3.1416);
+        float hi = smoothstep(0.55,0.95,band);
+        col += hi*vec3(0.30,0.22,0.12)*min(1.0,uFlow*1.6);
+        // —— 侧面边缘高光（圆柱感）
+        float rim = pow(1.0-abs(dot(vN,vView)),1.6);
+        col += rim*vec3(0.18,0.13,0.07);
+        // —— 断续：太慢时液柱断成一滴一滴
+        float cont = 1.0;
+        if(uBreak > 0.01){
+          float d = fract(y*(2.0+uBreak*5.0) - uTime*(1.2+uFlow*3.0));
+          float drop = smoothstep(0.0,0.14,d)*smoothstep(0.62,0.42,d);
+          cont = mix(1.0, drop, clamp(uBreak,0.0,1.0));
+        }
+        // —— 喷溅：太快时整柱发白、抖动
+        float sp2 = 0.0;
+        if(uSplash > 0.01){
+          float n = vnoise(vec2(y*9.0 - uTime*7.0, vUv.x*4.0));
+          sp2 = smoothstep(0.55,0.9,n)*uSplash;
+          col = mix(col, vec3(0.86,0.78,0.66), sp2*0.75);
+        }
+        float a = uOpacity * cont * (0.80 + 0.20*smoothstep(0.0,0.2,y)) * (1.0 - sp2*0.35);
+        a *= smoothstep(0.0,0.06,y);                 // 入杯处淡出
+        a *= 1.0 - smoothstep(0.93,1.0,y)*0.25;
+        if(a < 0.02) discard;
+        gl_FragColor = vec4(col, a);
+      }`
+  });
+}
+
+/* ====================== Crema shader ====================== */
+function makeCremaMaterial(){
+  return new THREE.ShaderMaterial({
+    transparent:true, depthWrite:false, side:THREE.DoubleSide,
+    uniforms:{
+      uTime:{value:0}, uQuality:{value:0.6}, uDecay:{value:0}, uFresh:{value:1}
+    },
+    vertexShader:`varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+    fragmentShader:`
+      varying vec2 vUv;
+      uniform float uTime,uQuality,uDecay,uFresh;
+      ${GLSL_NOISE}
+      void main(){
+        vec2 p = vUv*2.0-1.0;
+        float r = length(p);
+        if(r > 1.0) discard;
+        // 气泡：质量越好气泡越细腻
+        float bs = mix(26.0, 7.0, uQuality);
+        float n = fbm(vUv*bs + vec2(uTime*0.05, -uTime*0.03));
+        float n2 = fbm(vUv*bs*2.4 + 11.3);
+        float bub = smoothstep(0.35,0.75,n*0.7+n2*0.3);
+        vec3 dark  = vec3(0.44,0.26,0.13);
+        vec3 mid   = vec3(0.72,0.48,0.24);
+        vec3 light = vec3(0.90,0.72,0.46);
+        vec3 col = mix(dark, mid, smoothstep(0.25,0.55,bub));
+        col = mix(col, light, smoothstep(0.62,0.86,bub)*0.9);
+        // 边缘一圈略深（杯壁）
+        col *= 1.0 - smoothstep(0.78,1.0,r)*0.35;
+        // 消散：中心先破，露出下面的咖啡
+        float hole = smoothstep(0.10,0.62,uDecay);
+        float mask = 1.0 - hole*(1.0-smoothstep(0.0,0.55,r));
+        float a = mask * (1.0 - smoothstep(0.75,1.0,uDecay)*0.6);
+        // 细腻crema有柔和高光
+        float gloss = smoothstep(0.55,0.95,fbm(vUv*4.0+vec2(3.1,uTime*0.08)))*uQuality;
+        col += gloss*0.16;
+        if(a < 0.02) discard;
+        gl_FragColor = vec4(col, a);
+      }`
+  });
+}
+
+/* ====================== 液面（咖啡本体）shader ====================== */
+function makeBrewMaterial(){
+  return new THREE.ShaderMaterial({
+    transparent:true, side:THREE.DoubleSide,
+    uniforms:{
+      uTime:{value:0}, uColA:{value:new THREE.Color('#2a1810')},
+      uColB:{value:new THREE.Color('#7a4419')}, uFill:{value:0}
+    },
+    vertexShader:`varying vec2 vUv; varying vec3 vN; varying vec3 vP;
+      void main(){ vUv=uv; vN=normalize(normalMatrix*normal); vP=position;
+        gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+    fragmentShader:`
+      varying vec2 vUv; varying vec3 vN; varying vec3 vP;
+      uniform float uTime; uniform vec3 uColA,uColB; uniform float uFill;
+      ${GLSL_NOISE}
+      void main(){
+        // 顶面：深色咖啡 + 缓慢流动的油光
+        float n = fbm(vUv*7.0 + vec2(uTime*0.06,-uTime*0.04));
+        vec3 col = mix(uColA, uColB, smoothstep(0.3,0.8,n));
+        float sheen = smoothstep(0.6,0.95, fbm(vUv*3.0+vec2(uTime*0.13,1.7)));
+        col += sheen*vec3(0.16,0.11,0.05);
+        gl_FragColor = vec4(col,1.0);
+      }`
+  });
+}
+
+/* ====================== 蒸汽 / 光尘 粒子 ====================== */
+function makePuffMaterial(opts={}){
+  return new THREE.ShaderMaterial({
+    transparent:true, depthWrite:false, blending:THREE.AdditiveBlending,
+    uniforms:{
+      uTime:{value:0}, uSize:{value:opts.size||26}, uOpacity:{value:opts.opacity||0.5},
+      uRise:{value:opts.rise||0.5}, uWob:{value:opts.wob||0.05},
+      uTint:{value:new THREE.Color(opts.tint||'#ffffff')}
+    },
+    vertexShader:`
+      attribute float aSeed; attribute float aScale;
+      uniform float uTime,uSize,uRise,uWob;
+      varying float vA; varying float vSeed;
+      void main(){
+        vec3 p = position;
+        float life = fract(uTime*(0.10+uRise*0.16) + aSeed);
+        p.y += life*uRise*1.6;
+        p.x += sin(uTime*0.8 + aSeed*37.0)*uWob*life;
+        p.z += cos(uTime*0.7 + aSeed*23.0)*uWob*life*0.6;
+        vec4 mv = modelViewMatrix*vec4(p,1.0);
+        gl_Position = projectionMatrix*mv;
+        gl_PointSize = uSize*aScale*(0.35+life*1.5)*(1.0/max(0.001,-mv.z));
+        vA = sin(life*3.14159);
+        vSeed = aSeed;
+      }`,
+    fragmentShader:`
+      uniform float uOpacity; uniform vec3 uTint;
+      varying float vA; varying float vSeed;
+      ${GLSL_NOISE}
+      void main(){
+        vec2 c = gl_PointCoord-0.5;
+        float r = length(c);
+        float ang = atan(c.y,c.x);
+        // 卡通化的团状边缘：柔和 + 轻微噪声变形
+        float wob = vnoise(vec2(ang*2.0+vSeed*10.0, 0.0))*0.16;
+        float a = smoothstep(0.5, 0.16+wob*0.5, r);
+        a *= vA*uOpacity;
+        if(a < 0.01) discard;
+        gl_FragColor = vec4(uTint, a);
+      }`
+  });
+}
+function makePuffCloud(count, spread, spreadY, seedRange=1){
+  const g = new THREE.BufferGeometry();
+  const pos = new Float32Array(count*3), sd = new Float32Array(count), sc = new Float32Array(count);
+  for(let i=0;i<count;i++){
+    pos[i*3]   = rand(-spread,spread);
+    pos[i*3+1] = rand(0, spreadY);
+    pos[i*3+2] = rand(-spread,spread);
+    sd[i] = Math.random()*seedRange;
+    sc[i] = rand(0.6,1.5);
+  }
+  g.setAttribute('position', new THREE.BufferAttribute(pos,3));
+  g.setAttribute('aSeed', new THREE.BufferAttribute(sd,1));
+  g.setAttribute('aScale', new THREE.BufferAttribute(sc,1));
+  return g;
+}
+
+/* ====================== 晨光光柱 ====================== */
+function makeShaftMaterial(){
+  return new THREE.ShaderMaterial({
+    transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, side:THREE.DoubleSide,
+    uniforms:{ uTime:{value:0}, uOpacity:{value:0.16} },
+    vertexShader:`varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+    fragmentShader:`
+      varying vec2 vUv; uniform float uTime,uOpacity;
+      ${GLSL_NOISE}
+      void main(){
+        float x = abs(vUv.x-0.5)*2.0;
+        float edge = 1.0-smoothstep(0.15,1.0,x);          // 柔边
+        float vert = smoothstep(0.0,0.25,vUv.y)*(1.0-smoothstep(0.55,1.0,vUv.y));
+        float n = fbm(vec2(vUv.x*3.0, vUv.y*1.6 - uTime*0.05));
+        float a = edge*vert*(0.55+0.45*n)*uOpacity;
+        vec3 col = mix(vec3(1.0,0.86,0.62), vec3(1.0,0.94,0.80), n);
+        gl_FragColor = vec4(col, a);
+      }`
+  });
+}
+
+/* ====================== 渲染器 / 场景 / 相机 ====================== */
+const IS_SMALL = Math.min(innerWidth, innerHeight) < 700 || /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+const renderer = new THREE.WebGLRenderer({antialias:true, alpha:false, powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(devicePixelRatio, IS_SMALL ? 1.6 : 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+$('app').appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0xa8969c, 5.5, 15);
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.05, 60);
+camera.position.set(0.9, 1.0, 2.05);
+
+/* 背景：暖→冷的晨间渐变 */
+(function(){
+  const c = document.createElement('canvas'); c.width=8; c.height=256;
+  const g = c.getContext('2d').createLinearGradient(0,0,0,256);
+  g.addColorStop(0,'#f0c193'); g.addColorStop(0.42,'#c8a08a');
+  g.addColorStop(0.78,'#7d6a80'); g.addColorStop(1,'#4c4258');
+  const ctx = c.getContext('2d'); ctx.fillStyle=g; ctx.fillRect(0,0,8,256);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  scene.background = t;
+})();
+
+/* ====================== 灯光 ====================== */
+const sunPos = new THREE.Vector3(-2.2, 2.4, -0.6);
+const sun = new THREE.DirectionalLight(0xffd9a4, 3.1);
+sun.position.copy(sunPos); sun.target.position.set(0.2,0,0.6);
+sun.shadow.camera.far=14;
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048,2048);
+sun.shadow.camera.left=-3; sun.shadow.camera.right=3;
+sun.shadow.camera.top=3;   sun.shadow.camera.bottom=-3;
+sun.shadow.camera.near=0.5; sun.shadow.camera.far=12;
+sun.shadow.bias = -0.0012; sun.shadow.normalBias = 0.02;
+scene.add(sun, sun.target);
+
+scene.add(new THREE.AmbientLight(0x7d719e, 1.05));
+scene.add(new THREE.HemisphereLight(0xffd9a8, 0x6b5f80, 0.80));
+const fill = new THREE.PointLight(0xffc98a, 1.7, 7, 1.6); fill.position.set(1.7,1.05,1.5); scene.add(fill);
+const fill2 = new THREE.PointLight(0xffe0b4, 0.9, 6, 1.8); fill2.position.set(-1.2,0.7,1.3); scene.add(fill2);
+const lamp = new THREE.PointLight(0xffbe7a, 1.25, 4.6, 2); lamp.position.set(0.15,1.28,-0.15); scene.add(lamp);
+
+/* ====================== 建模 helper ====================== */
+const R = {};
+function add(parent, geo, mat, x=0,y=0,z=0, rx=0,ry=0,rz=0){
+  const m = new THREE.Mesh(geo, mat);
+  m.position.set(x,y,z); m.rotation.set(rx,ry,rz);
+  m.castShadow = true; m.receiveShadow = true;
+  parent.add(m); return m;
+}
+const COL = {
+  wood:'#c08d5c', woodDark:'#8f6440', woodLite:'#d9a870',
+  metal:'#c6cfd8', metalDark:'#8e9aa6', metalDeep:'#5d6874',
+  wall:'#c9a98a', floor:'#8a6a52', dark:'#3b3542', dark2:'#4a4453',
+  ceramic:'#f4ecdf', ink:'#2e2836'
+};
+
+/* ====================== 房间 ====================== */
+const room = new THREE.Group(); scene.add(room);
+const wallMat = toon(COL.wall,{soft:true});
+const backWall = add(room, new THREE.PlaneGeometry(10,6), wallMat, 0,1.6,-2.25, 0,0,0);
+backWall.castShadow = false;
+const floorMat = toon(COL.floor,{soft:true});
+const floor = add(room, new THREE.PlaneGeometry(10,7), floorMat, 0,-0.8,0, -Math.PI/2,0,0);
+floor.castShadow = false;
+const sideWall = add(room, new THREE.PlaneGeometry(7,6), wallMat, -3.1,1.6,0, 0,Math.PI/2,0);
+sideWall.castShadow = false;
+
+/* 窗（晨光源） */
+const win = new THREE.Group(); win.position.set(-1.55,1.5,-2.2); room.add(win);
+add(win, new THREE.PlaneGeometry(1.25,1.5), new THREE.MeshBasicMaterial({color:0xfff0cf}), 0,0,0.01);
+const frameMat = toon('#7a5b45');
+add(win, roundedBox(1.4,0.09,0.1,0.03), frameMat, 0, 0.78, 0.03);
+add(win, roundedBox(1.4,0.09,0.1,0.03), frameMat, 0,-0.78, 0.03);
+add(win, roundedBox(0.09,1.6,0.1,0.03), frameMat, -0.66,0,0.03);
+add(win, roundedBox(0.09,1.6,0.1,0.03), frameMat,  0.66,0,0.03);
+add(win, roundedBox(0.055,1.55,0.08,0.02), frameMat, 0,0,0.04);
+add(win, roundedBox(1.36,0.055,0.08,0.02), frameMat, 0,0,0.04);
+
+/* ====================== 吧台 ====================== */
+const bar = new THREE.Group(); scene.add(bar);
+const topMat = toon(COL.wood,{soft:true});
+add(bar, roundedBox(3.9,0.13,1.55,0.045), topMat, 0,-0.065,0);
+add(bar, roundedBox(3.9,0.72,0.12,0.04), toon(COL.woodDark,{soft:true}), 0,-0.49,0.72);
+for(let i=-1;i<=1;i++) add(bar, new THREE.BoxGeometry(3.86,0.008,0.012), toon('#6f4c30'), 0,-0.001,i*0.42);
+add(bar, roundedBox(3.9,0.06,0.06,0.02), toon(COL.woodLite), 0,-0.13,0.75);
+
+/* ====================== 咖啡机 ====================== */
+const machine = new THREE.Group(); machine.position.set(-0.55,0,-0.36); scene.add(machine); R.machine = machine;
+const mBody = toon(COL.metal), mDark = toon(COL.metalDark), mDeep = toon(COL.metalDeep);
+add(machine, roundedBox(1.02,0.1,0.68,0.04), mDark, 0,0.05,0);
+add(machine, roundedBox(0.94,0.62,0.62,0.13), mBody, 0,0.41,0);
+add(machine, roundedBox(0.98,0.07,0.66,0.03), mDark, 0,0.755,0);
+add(machine, new THREE.CylinderGeometry(0.13,0.15,0.13,20), toon('#e8d3b4',{opacity:0.5}), -0.24,0.82,0);
+for(let i=0;i<7;i++){
+  const b = add(machine, new THREE.IcosahedronGeometry(0.022,0), toon('#4a2c18'),
+    -0.24+rand(-0.07,0.07), 0.79+rand(0,0.06), rand(-0.07,0.07));
+  b.castShadow=false;
+}
+/* 冲煮头 */
+const group1 = new THREE.Group(); group1.position.set(0,0.46,0.30); machine.add(group1); R.group1 = group1;
+add(group1, new THREE.CylinderGeometry(0.085,0.07,0.16,20), mDeep, 0,0.02,0);
+add(group1, new THREE.TorusGeometry(0.088,0.012,8,24), mDark, 0,-0.06,0, Math.PI/2,0,0);
+add(group1, new THREE.CylinderGeometry(0.028,0.028,0.05,14), mDeep, 0,-0.10,0);
+/* 手柄 portafilter */
+const pf = new THREE.Group(); pf.position.set(0,0.44,0.30); machine.add(pf); R.pf = pf;
+add(pf, new THREE.CylinderGeometry(0.098,0.086,0.1,22), mDark, 0,-0.02,0);
+add(pf, new THREE.CylinderGeometry(0.086,0.078,0.03,22), mDeep, 0,-0.075,0);
+add(pf, new THREE.CylinderGeometry(0.022,0.018,0.045,12), mDeep, 0,-0.10,0);
+add(pf, roundedBox(0.07,0.05,0.30,0.02), toon('#2f2a36'), 0,-0.05,0.24);
+add(pf, new THREE.SphereGeometry(0.038,14,12), toon('#2f2a36'), 0,-0.05,0.40);
+/* 蒸汽棒 + 旋钮 + 表盘 */
+add(machine, new THREE.CylinderGeometry(0.016,0.013,0.26,12), mBody, 0.42,0.34,0.24, 0.35,0,0.25);
+add(machine, new THREE.SphereGeometry(0.022,12,10), mDeep, 0.50,0.22,0.29);
+add(machine, new THREE.CylinderGeometry(0.058,0.058,0.018,24), toon('#f2ece1'), 0,0.60,0.312, Math.PI/2,0,0);
+const gaugePivot = new THREE.Group(); gaugePivot.position.set(0,0.60,0.321); machine.add(gaugePivot);
+const gaugeNeedle = add(gaugePivot, new THREE.BoxGeometry(0.006,0.038,0.004), toon('#c9503a'), 0,0.012,0.004);
+R.gauge = gaugePivot;
+for(let i=0;i<3;i++) add(machine, new THREE.CylinderGeometry(0.022,0.022,0.02,14), toon(i?'#d9c7b0':'#c9503a'), -0.33+i*0.11,0.34,0.312, Math.PI/2,0,0);
+/* 滴水盘 */
+for(let i=0;i<6;i++) add(machine, new THREE.BoxGeometry(0.5,0.008,0.016), mDark, 0,0.105,0.06+i*0.045);
+
+/* ====================== 磨豆机 ====================== */
+const grinder = new THREE.Group(); grinder.position.set(1.02,0,-0.30); scene.add(grinder); R.grinder = grinder;
+const gDark = toon(COL.dark), gMid = toon(COL.dark2);
+add(grinder, roundedBox(0.38,0.08,0.36,0.03), gDark, 0,0.04,0);
+add(grinder, roundedBox(0.34,0.54,0.34,0.09), gMid, 0,0.35,0);
+add(grinder, new THREE.CylinderGeometry(0.135,0.155,0.22,22), toon('#e6d2b6',{opacity:0.45}), 0,0.73,0);
+for(let i=0;i<10;i++){
+  const b = add(grinder, new THREE.IcosahedronGeometry(0.026,0), toon('#5a3520'), rand(-0.08,0.08),0.66+rand(0,0.09), rand(-0.08,0.08));
+  b.castShadow = false;
+}
+add(grinder, roundedBox(0.16,0.1,0.06,0.02), gDark, 0,0.20,0.17);
+/* 旋钮（可旋转） */
+const knob = new THREE.Group(); knob.position.set(0,0.40,0.18); grinder.add(knob); R.knob = knob;
+add(knob, new THREE.CylinderGeometry(0.082,0.082,0.055,26), toon('#d9c3a4'), 0,0,0, Math.PI/2,0,0);
+add(knob, new THREE.BoxGeometry(0.012,0.055,0.014), toon('#4a3323'), 0,0.038,0.03);
+for(let i=0;i<10;i++){
+  const a = -Math.PI*0.75 + i*(Math.PI*1.5/9);
+  add(knob, new THREE.BoxGeometry(0.008,0.012,0.008), toon('#8a7256'),
+    Math.sin(a)*0.098, Math.cos(a)*0.098, 0.006, 0,0,-a);
+}
+/* 出粉口下方的粉堆（视觉反馈研磨粗细） */
+const groundsMat = toon('#6b4526');
+const grounds = add(grinder, new THREE.CylinderGeometry(0.055,0.06,0.035,16), groundsMat, 0,0.155,0.19);
+R.grounds = grounds; grounds.visible = false; grounds.castShadow=false;
+
+/* ====================== 电子秤 ====================== */
+const scaleG = new THREE.Group(); scaleG.position.set(-0.55,0,0.26); scene.add(scaleG); R.scaleG = scaleG;
+add(scaleG, roundedBox(0.30,0.035,0.29,0.02), toon('#33303c'), 0,0.018,0);
+add(scaleG, roundedBox(0.27,0.006,0.26,0.004), toon('#c9c2cf'), 0,0.039,0);
+const screenCv = document.createElement('canvas'); screenCv.width=256; screenCv.height=128;
+const screenTex = new THREE.CanvasTexture(screenCv); screenTex.colorSpace = THREE.SRGBColorSpace;
+R.screenTex = screenTex; R.screenCv = screenCv;
+const screen = add(scaleG, new THREE.PlaneGeometry(0.15,0.075),
+  new THREE.MeshBasicMaterial({map:screenTex, transparent:true}), 0,0.026,0.1455);
+screen.castShadow=false;
+
+/* ====================== 杯子 ====================== */
+const cupG = new THREE.Group(); cupG.position.set(-0.55,0.042,0.26); scene.add(cupG); R.cupG = cupG;
+add(cupG, new THREE.CylinderGeometry(0.062,0.058,0.012,28), toon(COL.ceramic), 0,0.006,0);
+const cupProfile = [
+  [0.014,0],[0.026,0.003],[0.030,0.012],[0.0335,0.030],[0.0350,0.050],[0.0340,0.060],[0.0328,0.062],
+  [0.0305,0.060],[0.0290,0.055],[0.0250,0.028],[0.0190,0.010],[0.0,0.008]
+];
+const cupMesh = add(cupG, lathe(cupProfile,40), toon(COL.ceramic,{side:THREE.DoubleSide}), 0,0.012,0);
+add(cupG, new THREE.TorusGeometry(0.019,0.006,8,22,Math.PI*1.2), toon(COL.ceramic), 0.038,0.038,0, 0,Math.PI/2,-0.35);
+
+/* 杯中咖啡 + crema */
+const brewMat = makeBrewMaterial();
+const brew = add(cupG, new THREE.CylinderGeometry(0.0295,0.0235,1,26), brewMat, 0,0.010,0);
+brew.scale.y = 0.001; brew.visible = false; brew.castShadow=false; R.brew = brew;
+const cremaMat = makeCremaMaterial();
+const crema = add(cupG, new THREE.PlaneGeometry(0.062,0.062), cremaMat, 0,0.010,0, -Math.PI/2,0,0);
+crema.visible = false; crema.castShadow=false; R.crema = crema;
+
+/* ====================== 液柱 ====================== */
+const streamMat = makeStreamMaterial(); R.streamMat = streamMat;
+const stream = new THREE.Mesh(new THREE.CylinderGeometry(0.014,0.014,1,12,1,true), streamMat);
+stream.visible = false; scene.add(stream); R.stream = stream;
+/* 喷溅/液滴粒子 */
+const dropMat = makePuffMaterial({size:14, opacity:0.85, rise:0.06, wob:0.02, tint:'#c98a4a'});
+R.dropMat = dropMat;
+const drops = new THREE.Points(makePuffCloud(26,0.03,0.02), dropMat);
+drops.visible = false; scene.add(drops); R.drops = drops;
+
+/* ====================== 蒸汽 ====================== */
+const steamMat = makePuffMaterial({size:34, opacity:0.0, rise:0.42, wob:0.045, tint:'#fff4e2'});
+R.steamMat = steamMat;
+const steam = new THREE.Points(makePuffCloud(34,0.045,0.05), steamMat);
+steam.position.set(-0.55,0.13,0.26); steam.visible=false; scene.add(steam); R.steam = steam;
+
+/* ====================== 装饰 ====================== */
+const deco = new THREE.Group(); scene.add(deco);
+/* 奶缸 */
+const pitcher = new THREE.Group(); pitcher.position.set(0.12,0,0.42); deco.add(pitcher);
+add(pitcher, new THREE.CylinderGeometry(0.052,0.043,0.1,22), toon('#dfe4e9'), 0,0.05,0);
+add(pitcher, new THREE.ConeGeometry(0.03,0.05,12), toon('#dfe4e9'), 0,0.10,0.055, 0.5,0,0);
+/* 豆罐 */
+add(deco, new THREE.CylinderGeometry(0.055,0.055,0.13,20), toon('#e5d4bb'), 1.62,0.065,-0.1);
+add(deco, new THREE.CylinderGeometry(0.058,0.058,0.02,20), toon('#5e4a38'), 1.62,0.14,-0.1);
+/* 绿植 */
+const plant = new THREE.Group(); plant.position.set(-1.72,0,-0.18); deco.add(plant);
+add(plant, new THREE.CylinderGeometry(0.075,0.058,0.12,18), toon('#a86b4b'), 0,0.06,0);
+for(let i=0;i<7;i++){
+  const leaf = add(plant, new THREE.IcosahedronGeometry(0.06,0), toon(i%2?'#5f8a52':'#78a05f'),
+    rand(-0.05,0.05), 0.14+rand(0,0.12), rand(-0.05,0.05));
+  leaf.scale.set(rand(0.7,1.3),rand(1.1,1.9),rand(0.7,1.3));
+}
+/* 吊灯 */
+add(deco, new THREE.ConeGeometry(0.23,0.19,20,1,true), toon('#e0a15c',{side:THREE.DoubleSide}), 0.15,1.32,-0.15);
+add(deco, new THREE.SphereGeometry(0.045,14,12), new THREE.MeshBasicMaterial({color:0xffe0ae}), 0.15,1.24,-0.15);
+add(deco, new THREE.CylinderGeometry(0.006,0.006,0.5,8), toon('#5a4a3e'), 0.15,1.66,-0.15);
+/* 墙上小黑板 */
+add(deco, roundedBox(0.62,0.44,0.04,0.03), toon('#4a3a30'), -1.05,1.05,-2.16);
+add(deco, roundedBox(0.54,0.36,0.01,0.01), toon('#26303a'), -1.05,1.05,-2.13);
+/* 搁板 + 罐子 */
+add(deco, roundedBox(1.3,0.06,0.24,0.02), toon(COL.wood), 0.95,0.95,-2.05);
+for(let i=0;i<4;i++) add(deco, new THREE.CylinderGeometry(0.05,0.05,0.12,16), toon(['#b9703f','#7d8f6a','#c9a05a','#8a5f7a'][i]), 0.55+i*0.26,1.04,-2.05);
+
+/* ====================== 晨光光柱 ====================== */
+const shaftMat = makeShaftMaterial(); R.shaftMat = shaftMat;
+const shafts = new THREE.Group(); scene.add(shafts);
+for(let i=0;i<3;i++){
+  const len = 4.2, geo = new THREE.CylinderGeometry(0.16+i*0.08, 0.62+i*0.16, len, 18, 1, true);
+  const m = new THREE.Mesh(geo, shaftMat.clone());
+  m.material.uniforms.uOpacity.value = 0.21 - i*0.045;
+  const from = new THREE.Vector3(-1.55+i*0.42, 1.5, -2.15);
+  const to   = new THREE.Vector3(0.35+i*0.5, -0.75, 0.85);
+  const dir = to.clone().sub(from).normalize();
+  m.position.copy(from.clone().addScaledVector(dir, len/2));
+  m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), dir.clone().negate());
+  m.renderOrder = 4;
+  shafts.add(m);
+}
+
+/* ====================== 光尘 ====================== */
+const dustMat = makePuffMaterial({size:9, opacity:0.55, rise:0.12, wob:0.09, tint:'#ffe9c6'});
+R.dustMat = dustMat;
+const dustGeo = makePuffCloud(IS_SMALL?120:230, 2.0, 1.5);
+for(let i=0;i<(IS_SMALL?120:230);i++){ dustGeo.attributes.position.array[i*3+1] = rand(-0.1,1.5); }
+const dust = new THREE.Points(dustGeo, dustMat);
+dust.position.set(0,0,-0.2); scene.add(dust); R.dust = dust;
+
+/* ====================== 整体描边 ====================== */
+const outlineAll = addOutline(1.028, 0.03);
+[machine, grinder, scaleG, cupG, pitcher, plant].forEach(o=>outlineAll(o));
+[bar, deco].forEach(o=>o.traverse(c=>{ if(c.isMesh && c.geometry.boundingSphere==null) c.geometry.computeBoundingSphere(); }));
+
+/* ====================== 相机运镜 ====================== */
+const SHOTS = {
+  wide:    {p:[1.15,1.18,2.62], t:[-0.42,0.30,0.00]},
+  grinder: {p:[1.98,0.82,0.92], t:[1.00,0.34,-0.18]},
+  prep:    {p:[0.42,0.74,1.42], t:[-0.52,0.16,0.12]},
+  brew:    {p:[-0.05,0.50,0.94], t:[-0.55,0.22,0.24]},
+  closeup: {p:[-0.62,0.44,0.82], t:[-0.55,0.21,0.26]},
+  result:  {p:[-0.64,0.42,0.74], t:[-0.55,0.20,0.26]},
+};
+const cam = {
+  pos:new THREE.Vector3(...SHOTS.wide.p), tgt:new THREE.Vector3(...SHOTS.wide.t),
+  dPos:new THREE.Vector3(...SHOTS.wide.p), dTgt:new THREE.Vector3(...SHOTS.wide.t),
+  yaw:0, pitch:0, dYaw:0, dPitch:0,
+  set(name){ const s=SHOTS[name]; if(!s) return;
+    this.dPos.set(...s.p); this.dTgt.set(...s.t); this.dYaw=0; this.dPitch=0; },
+};
+function shot(name){ cam.set(name); }
+let dragging=false, lastPt={x:0,y:0}, ptr={x:0,y:0}, ptrT={x:0,y:0};
+renderer.domElement.addEventListener('pointerdown', e=>{ dragging=true; lastPt={x:e.clientX,y:e.clientY}; });
+addEventListener('pointerup', ()=>dragging=false);
+addEventListener('pointermove', e=>{
+  ptrT.x = (e.clientX/innerWidth-0.5); ptrT.y = (e.clientY/innerHeight-0.5);
+  if(dragging){
+    cam.dYaw   = clamp(cam.dYaw   - (e.clientX-lastPt.x)*0.0042, -0.72, 0.72);
+    cam.dPitch = clamp(cam.dPitch + (e.clientY-lastPt.y)*0.0030, -0.20, 0.42);
+    lastPt={x:e.clientX,y:e.clientY};
+  }
+});
+function updateCamera(dt){
+  const k = 1-Math.pow(0.0016, dt);
+  cam.pos.lerp(cam.dPos, k); cam.tgt.lerp(cam.dTgt, k);
+  cam.yaw   = lerp(cam.yaw,   cam.dYaw + ptrT.x*0.10, 0.08);
+  cam.pitch = lerp(cam.pitch, cam.dPitch - ptrT.y*0.07, 0.08);
+  const off = cam.pos.clone().sub(cam.tgt);
+  const sph = new THREE.Spherical().setFromVector3(off);
+  const idle = (G.phase==='intro' || G.phase==='result') ? Math.sin(clock*0.16)*0.15 : 0;
+  sph.theta += cam.yaw + idle;
+  sph.phi = clamp(sph.phi + cam.pitch + idle*0.12, 0.22, 1.42);
+  const p = new THREE.Vector3().setFromSpherical(sph).add(cam.tgt);
+  camera.position.copy(p);
+  camera.lookAt(cam.tgt);
+}
+
+/* ====================== 程序化音效（7 种） ====================== */
+const Sfx = {
+  ctx:null, master:null, noise:null, nodes:{}, on:false,
+  init(){
+    if(this.ctx) return;
+    const AC = window.AudioContext||window.webkitAudioContext; if(!AC) return;
+    this.ctx = new AC();
+    this.master = this.ctx.createGain(); this.master.gain.value = 0.55; this.master.connect(this.ctx.destination);
+    const len = this.ctx.sampleRate*2;
+    const buf = this.ctx.createBuffer(1,len,this.ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for(let i=0;i<len;i++) d[i] = Math.random()*2-1;
+    this.noise = buf; this.on = true;
+  },
+  nsrc(){ const s=this.ctx.createBufferSource(); s.buffer=this.noise; s.loop=true; return s; },
+  /* 1 磨豆机：研磨度越细音调越尖、负荷越重 */
+  grinderStart(){
+    if(!this.on||this.nodes.gr) return; this.init();
+    const c=this.ctx, g=c.createGain(); g.gain.value=0; g.connect(this.master);
+    const lp=c.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=1400; lp.connect(g);
+    const o1=c.createOscillator(); o1.type='sawtooth'; o1.frequency.value=82;
+    const o2=c.createOscillator(); o2.type='square';   o2.frequency.value=41;
+    const og=c.createGain(); og.gain.value=0.30; o1.connect(og); o2.connect(og); og.connect(lp);
+    const n=this.nsrc(); const nf=c.createBiquadFilter(); nf.type='bandpass'; nf.frequency.value=1800; nf.Q.value=1.1;
+    const ng=c.createGain(); ng.gain.value=0.20; n.connect(nf); nf.connect(ng); ng.connect(g);
+    o1.start(); o2.start(); n.start();
+    g.gain.linearRampToValueAtTime(0.22, c.currentTime+0.12);
+    this.nodes.gr = {g,o1,o2,n,lp,nf};
+  },
+  grinderTune(f){ // f: 0 粗 → 1 细
+    if(!this.nodes.gr) return;
+    const c=this.ctx, t=c.currentTime;
+    this.nodes.gr.o1.frequency.setTargetAtTime(58+(1-f)*0+ f*118, t, 0.05);
+    this.nodes.gr.o2.frequency.setTargetAtTime(29+ f*59, t, 0.05);
+    this.nodes.gr.lp.frequency.setTargetAtTime(700+f*2600, t, 0.06);
+    this.nodes.gr.nf.frequency.setTargetAtTime(1100+f*2900, t, 0.06);
+  },
+  grinderStop(){
+    if(!this.nodes.gr) return;
+    const {g,o1,o2,n}=this.nodes.gr, c=this.ctx;
+    g.gain.cancelScheduledValues(c.currentTime);
+    g.gain.setTargetAtTime(0, c.currentTime, 0.06);
+    setTimeout(()=>{ try{o1.stop();o2.stop();n.stop();}catch(e){} }, 400);
+    this.nodes.gr=null;
+  },
+  /* 2 压粉：闷顿的"咚" */
+  tamp(power=1){
+    if(!this.on) return; const c=this.ctx,t=c.currentTime;
+    const o=c.createOscillator(); o.type='sine'; o.frequency.setValueAtTime(140,t);
+    o.frequency.exponentialRampToValueAtTime(48,t+0.13);
+    const g=c.createGain(); g.gain.setValueAtTime(0.0001,t);
+    g.gain.exponentialRampToValueAtTime(0.5*power,t+0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001,t+0.24);
+    o.connect(g); g.connect(this.master); o.start(t); o.stop(t+0.26);
+    const n=this.nsrc(); const nf=c.createBiquadFilter(); nf.type='lowpass'; nf.frequency.value=520;
+    const ng=c.createGain(); ng.gain.setValueAtTime(0.22*power,t); ng.gain.exponentialRampToValueAtTime(0.0001,t+0.14);
+    n.connect(nf); nf.connect(ng); ng.connect(this.master); n.start(t); n.stop(t+0.16);
+  },
+  /* 3 扣上手柄：清脆咔哒 */
+  click(){
+    if(!this.on) return; const c=this.ctx,t=c.currentTime;
+    const n=this.nsrc(); const f=c.createBiquadFilter(); f.type='highpass'; f.frequency.value=1800;
+    const g=c.createGain(); g.gain.setValueAtTime(0.34,t); g.gain.exponentialRampToValueAtTime(0.0001,t+0.07);
+    n.connect(f); f.connect(g); g.connect(this.master); n.start(t); n.stop(t+0.09);
+    const o=c.createOscillator(); o.type='triangle'; o.frequency.setValueAtTime(880,t);
+    const og=c.createGain(); og.gain.setValueAtTime(0.16,t); og.gain.exponentialRampToValueAtTime(0.0001,t+0.09);
+    o.connect(og); og.connect(this.master); o.start(t); o.stop(t+0.1);
+  },
+  /* 4 萃取：稳定"滋——"，状态不对变"滋啦" */
+  brewStart(){
+    if(!this.on||this.nodes.br) return; const c=this.ctx;
+    const g=c.createGain(); g.gain.value=0; g.connect(this.master);
+    const n=this.nsrc();
+    const bp=c.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=1150; bp.Q.value=0.9;
+    const hp=c.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=320;
+    n.connect(bp); bp.connect(hp); hp.connect(g); n.start();
+    /* 泵的低频 */
+    const o=c.createOscillator(); o.type='sawtooth'; o.frequency.value=52;
+    const og=c.createGain(); og.gain.value=0.05; const olp=c.createBiquadFilter(); olp.type='lowpass'; olp.frequency.value=220;
+    o.connect(olp); olp.connect(og); og.connect(g); o.start();
+    g.gain.setTargetAtTime(0.16, c.currentTime, 0.08);
+    this.nodes.br={g,n,bp,o};
+  },
+  brewUpdate(flowNorm, broken){
+    if(!this.nodes.br) return; const c=this.ctx,t=c.currentTime;
+    this.nodes.br.bp.frequency.setTargetAtTime(700+flowNorm*1500, t, 0.12);
+    this.nodes.br.g.gain.setTargetAtTime(0.10+flowNorm*0.13, t, 0.15);
+    // 状态不对 → 断续的"滋啦"
+    const rough = clamp(broken,0,1);
+    this.nodes.br.bp.Q && (this.nodes.br.bp.Q.value = 0.9+rough*7);
+  },
+  brewStop(){
+    if(!this.nodes.br) return; const {g,n,o}=this.nodes.br, c=this.ctx;
+    g.gain.setTargetAtTime(0, c.currentTime, 0.05);
+    setTimeout(()=>{ try{n.stop();o.stop();}catch(e){} }, 350);
+    this.nodes.br=null;
+  },
+  /* 5 蒸汽棒：粗粝嘶啦 → 绵密咕噜 */
+  steam(on=true){
+    if(!this.on) return; const c=this.ctx;
+    if(on && !this.nodes.st){
+      const g=c.createGain(); g.gain.value=0; g.connect(this.master);
+      const n=this.nsrc(); const bp=c.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=2600; bp.Q.value=1.6;
+      n.connect(bp); bp.connect(g); n.start();
+      g.gain.setTargetAtTime(0.13, c.currentTime, 0.15);
+      this.nodes.st={g,n,bp};
+    } else if(!on && this.nodes.st){
+      const {g,n}=this.nodes.st;
+      g.gain.setTargetAtTime(0, c.currentTime, 0.1);
+      setTimeout(()=>{try{n.stop();}catch(e){}},400); this.nodes.st=null;
+    }
+  },
+  steamTone(v){ if(this.nodes.st) this.nodes.st.bp.frequency.setTargetAtTime(1400+v*1800, this.ctx.currentTime, 0.1); },
+  /* 6 敲渣：闷响"砰" */
+  knock(){
+    if(!this.on) return; const c=this.ctx,t=c.currentTime;
+    const o=c.createOscillator(); o.type='sine'; o.frequency.setValueAtTime(210,t);
+    o.frequency.exponentialRampToValueAtTime(70,t+0.09);
+    const g=c.createGain(); g.gain.setValueAtTime(0.0001,t);
+    g.gain.exponentialRampToValueAtTime(0.42,t+0.008); g.gain.exponentialRampToValueAtTime(0.0001,t+0.19);
+    o.connect(g); g.connect(this.master); o.start(t); o.stop(t+0.2);
+  },
+  /* 7 杯子落下：陶瓷碰撞 */
+  cup(){
+    if(!this.on) return; const c=this.ctx,t=c.currentTime;
+    [1380,1960,2640].forEach((f,i)=>{
+      const o=c.createOscillator(); o.type='triangle'; o.frequency.value=f*(1+rand(-0.02,0.02));
+      const g=c.createGain(); g.gain.setValueAtTime(0.0001,t);
+      g.gain.exponentialRampToValueAtTime(0.14/(i+1),t+0.004);
+      g.gain.exponentialRampToValueAtTime(0.0001,t+0.30-i*0.07);
+      o.connect(g); g.connect(this.master); o.start(t); o.stop(t+0.35);
+    });
+  },
+  chime(ok=true){
+    if(!this.on) return; const c=this.ctx,t=c.currentTime;
+    const notes = ok?[784,988,1175]:[440,392];
+    notes.forEach((f,i)=>{
+      const o=c.createOscillator(); o.type='sine'; o.frequency.value=f;
+      const g=c.createGain(); const st=t+i*0.11;
+      g.gain.setValueAtTime(0.0001,st); g.gain.exponentialRampToValueAtTime(0.13,st+0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001,st+0.55);
+      o.connect(g); g.connect(this.master); o.start(st); o.stop(st+0.6);
+    });
+  }
+};
+
+/* ====================== 后处理：调色 + 暗角 + 颗粒 ====================== */
+let rt = new THREE.WebGLRenderTarget(1,1,{type:THREE.HalfFloatType, samples:2});
+rt.texture.colorSpace = THREE.SRGBColorSpace;
+const postScene = new THREE.Scene(), postCam = new THREE.OrthographicCamera(-1,1,1,-1,0,1);
+const postMat = new THREE.ShaderMaterial({
+  uniforms:{ tDiffuse:{value:rt.texture}, uTime:{value:0}, uRes:{value:new THREE.Vector2(1,1)} },
+  vertexShader:`varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.0,1.0); }`,
+  fragmentShader:`
+    varying vec2 vUv; uniform sampler2D tDiffuse; uniform float uTime; uniform vec2 uRes;
+    float hash(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
+    void main(){
+      vec2 uv = vUv;
+      vec2 c = uv-0.5;
+      float r2 = dot(c,c);
+      // 轻微色差（边缘）
+      float ca = 0.0016*r2*2.2;
+      vec3 col;
+      col.r = texture2D(tDiffuse, uv + c*ca).r;
+      col.g = texture2D(tDiffuse, uv).g;
+      col.b = texture2D(tDiffuse, uv - c*ca).b;
+      // 冷阴影 / 暖高光（split toning）
+      float lum = dot(col, vec3(0.299,0.587,0.114));
+      vec3 shadowTint = vec3(0.86,0.86,1.06);
+      vec3 highTint   = vec3(1.07,1.01,0.93);
+      col *= mix(shadowTint, highTint, smoothstep(0.18,0.82,lum));
+    // 暖色晨光曝光
+    col *= 1.30;
+    // 柔和 S 曲线 + 轻微去饱和暗部
+    col = clamp(col,0.0,1.0);
+    col = mix(col, col*col*(3.0-2.0*col), 0.18);
+    col += 0.012;
+      col = mix(vec3(lum), col, 1.14);
+      col *= vec3(1.03,0.995,0.965);
+      // 暗角
+      float vig = smoothstep(0.95,0.28,length(c*vec2(1.05,1.15)));
+      col *= mix(0.62,1.0,vig);
+      // 笔触颗粒
+      float g = hash(floor(uv*uRes/2.4)+floor(uTime*8.0));
+      col += (g-0.5)*0.030;
+      gl_FragColor = vec4(col,1.0);
+    }`
+});
+postScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2,2), postMat));
+
+/* ============================================================
+   【模拟层】后台真实萃取模型 —— 玩家永远看不到这些数字
+   ============================================================ */
+const SIM = {
+  day:1, beanAge:1, humidity:0.5, burrHeat:0,
+  grind:0.52, dose:18, tampQ:1, channel:0,
+  idealFlow:1.70, yieldG:0, brewT:0, lastTaste:0,
+};
+const BANDS = [
+  {k:'slow',  up:-0.30, name:'太慢', flavor:'焦苦、喉干'},
+  {k:'lslow', up:-0.11, name:'略慢', flavor:'苦味偏重'},
+  {k:'good',  up: 0.11, name:'刚好', flavor:'甜感、余韵长'},
+  {k:'lfast', up: 0.30, name:'略快', flavor:'偏酸、薄'},
+  {k:'fast',  up: 9,    name:'太快', flavor:'尖酸、咸、水感'},
+];
+function bandOf(v){ for(const b of BANDS) if(v < b.up) return b; return BANDS[4]; }
+/* 有效研磨度：养豆期↑变快（越久变化越小）、磨豆机发热↑变粗 */
+function effGrind(){
+  const age = 0.11*Math.sqrt(Math.max(0, SIM.beanAge-1));   // 养豆期漂移
+  return clamp(SIM.grind + SIM.burrHeat*0.13 - age, 0.04, 1.3);
+}
+function flowNow(){
+  const g = effGrind();
+  let f = 2.55/(0.30 + g*2.55) * Math.pow(18/Math.max(9,SIM.dose), 0.55);
+  f *= 1 - (SIM.humidity-0.5)*0.14;      // 潮湿：粉结块，走得慢一点
+  f *= 1 + SIM.channel*0.35;             // 通道：水找捷径，忽快忽乱
+  return f;
+}
+function rollDay(d){
+  SIM.day = d; SIM.beanAge = d;
+  SIM.humidity = rand(0.25,0.9);
+  SIM.burrHeat = 0;
+}
+function rollChannel(){
+  const damp = clamp(1 - SIM.tampQ, 0, 1);
+  const p = clamp(0.03 + SIM.humidity*0.22 + damp*0.34 + Math.abs(SIM.dose-18)*0.010, 0, 0.78);
+  SIM.channel = Math.random() < p ? clamp(0.35 + Math.random()*0.5 + damp*0.3, 0, 1) : 0;
+}
+
+/* ============================================================
+   【反馈层】把模拟结果翻译成看得见的画面
+   ============================================================ */
+function drawScale(v){
+  const c = R.screenCv, x = c.getContext('2d');
+  x.fillStyle='#100e0d'; x.fillRect(0,0,256,128);
+  x.fillStyle='rgba(255,190,110,.10)'; x.fillRect(6,6,244,116);
+  x.font='bold 78px ui-monospace,Menlo,Consolas,monospace';
+  x.fillStyle='#ffcf7a'; x.textAlign='right';
+  x.fillText(v.toFixed(1), 196, 92);
+  x.font='30px ui-monospace,Menlo,monospace'; x.textAlign='left';
+  x.fillText('g', 204, 92);
+  R.screenTex.needsUpdate = true;
+}
+
+/* 液柱几何：从手柄出口到杯口 */
+const SPOUT = new THREE.Vector3(-0.55, 0.317, -0.06);
+const CUPMOUTH = new THREE.Vector3(-0.55, 0.118, 0.26);
+function updateStream(flow, ratio){
+  const fe = (flow - SIM.idealFlow)/SIM.idealFlow;    // 流速偏差
+  const m = stream.material.uniforms;
+  const prog = clamp(ratio/2.0, 0, 1.4);
+  // 液柱颜色：随萃取推进由深变浅，整体色调由流速偏差决定
+  m.uHue.value = clamp(0.5 + fe*0.85 + (prog-0.45)*0.42, 0, 1);
+  m.uFlow.value = clamp(flow/2.4, 0.08, 1.2);
+  m.uProg.value = prog;
+  m.uBreak.value = clamp((-fe-0.20)/0.55, 0, 1);
+  m.uSplash.value = clamp((fe-0.22)/0.5, 0, 1) + SIM.channel*0.35;
+  // 通道效应：液柱忽粗忽细
+  const wob = SIM.channel > 0 ? (Math.sin(clock*15.5)*0.5+Math.sin(clock*7.3)*0.5) : 0;
+  const thick = clamp(0.0095 + flow*0.0055 + wob*SIM.channel*0.006, 0.004, 0.032);
+  const top = SPOUT.clone(), bot = CUPMOUTH.clone();
+  const mid = top.clone().add(bot).multiplyScalar(0.5);
+  const h = top.distanceTo(bot);
+  R.stream.position.copy(mid);
+  R.stream.scale.set(thick/0.014, h, thick/0.014);
+  R.stream.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), top.clone().sub(bot).normalize());
+  R.stream.visible = true;
+  // 喷溅粒子
+  R.drops.position.copy(bot.clone().addScaledVector(top.clone().sub(bot).normalize(), 0.02));
+  R.drops.visible = m.uSplash.value > 0.25;
+  R.dropMat.uniforms.uOpacity.value = clamp(m.uSplash.value*0.8, 0, 0.9);
+  return fe;
+}
+
+/* ============================================================
+   【玩家层】游戏流程
+   ============================================================ */
+const G = {
+  phase:'intro', day:1, cupIndex:0, cust:null,
+  brewing:false, pouring:false, tampPower:0, tamping:false,
+  brewFlow:0, cut:0, tips:0, lastTaste:0, isTestCup:true,
+};
+/* 只在第一天给的老规矩（不是数值面板，是师傅的口诀） */
+const TIP_RULE = `<br><span style="opacity:.55">师傅的口诀：液重走到粉量的两倍左右，先拿这个找感觉。</span>`;
+
+const CUSTS = [
+  {t:'常客',  tag:'熟面孔', tol:0.16, tip:9,
+   says:['随便，好喝就行。','和上次一样。','老样子，你看着办。']},
+  {t:'通勤客',tag:'赶时间', tol:0.27, tip:5,
+   says:['来杯提神的，快点上！','要提神，越浓越好，我赶地铁。']},
+  {t:'老饕',  tag:'舌头很刁', tol:0.09, tip:20,
+   says:['来杯提神的，别糊弄我。','我不要太酸。','和上次一样——差一点我都喝得出来。']},
+  {t:'游客',  tag:'先拍照', tol:0.31, tip:11,
+   says:['听说你们家很有名，来一杯！','好看就行，我不太懂咖啡。']},
+  {t:'同行',  tag:'聊手感', tol:0.13, tip:15,
+   says:['今天豆子状态怎么样？给我来一杯。','我不要太酸，尾段要干净。']},
+];
+function pickCustomer(){
+  const c = CUSTS[Math.floor(Math.random()*CUSTS.length)];
+  const say = c.says[Math.floor(Math.random()*c.says.length)];
+  let prefer = 0, tol = c.tol, note = '';
+  if(/提神|浓/.test(say))        { prefer = -0.12; note = '他要更沉一点：往"慢"的方向走一点'; }
+  else if(/不要太酸/.test(say))  { prefer = -0.09; note = '怕酸——往"慢一点"的方向走，但别到焦苦'; }
+  else if(/和上次一样|老样子/.test(say)){ prefer = G.lastTaste; note = '复现上一杯的味道——但豆子已经变了'; }
+  else if(/随便/.test(say))      { tol *= 1.7; note = '容错很大'; }
+  else if(/不太懂|好看/.test(say)){ tol *= 1.5; note = '他更在意杯子好不好看'; }
+  return {...c, say, prefer, tol, note};
+}
+
+/* ---------------- UI ---------------- */
+function setDock(o){
+  $('stepName').textContent = o.name||'';
+  $('hintText').innerHTML = o.hint||'';
+  $('toneVal').textContent = o.tone||'';
+  $('slotA').innerHTML = o.a||'';
+  $('slotB').innerHTML = o.b||'';
+  const c = $('slotC'); c.innerHTML='';
+  (o.btns||[]).forEach(b=>{
+    const el = document.createElement('button');
+    el.className = 'btn '+(b.primary?'primary':'ghost'); el.textContent = b.label;
+    el.onclick = b.on; c.appendChild(el); b.el = el;
+  });
+  $('dock').classList.remove('hide');
+}
+function hideDock(){ $('dock').classList.add('hide'); }
+function banner(main, sub, ms=1800){
+  const b = $('banner');
+  b.innerHTML = main + (sub?`<small>${sub}</small>`:'');
+  b.classList.add('show');
+  clearTimeout(banner._t);
+  banner._t = setTimeout(()=>b.classList.remove('show'), ms);
+}
+function showOrder(c){
+  $('custType').textContent = c? c.t : '自己';
+  $('custTag').textContent  = c? c.tag : '测试杯';
+  $('orderSay').textContent = c? c.say : '开门前，先给自己做一杯，找找今天的手感。';
+  $('orderNote').textContent= c? (c.note||'') : '豆子的状态每天都会漂。昨天的刻度，今天已经不对了。';
+  $('order').classList.add('show');
+}
+function hideOrder(){ $('order').classList.remove('show'); }
+
+/* ---------------- 一天的开始 ---------------- */
+function startDay(d){
+  G.day = d; G.cupIndex = 0; G.isTestCup = true;
+  rollDay(d);
+  /* 清空昨天的杯子 */
+  R.brew.visible = false; R.crema.visible = false;
+  R.stream.visible = false; R.drops.visible = false;
+  R.pfWant = 0;                       // 手柄卸下，等重新上粉
+  drawScale(0);
+  $('dayNum').textContent = d;
+  $('cupNum').textContent = 0;
+  banner(`第 ${d} 天`, d===1 ? '开门前 · 先调磨' : '豆子又变了一点', 2200);
+  setTimeout(()=>{ shot('grinder'); stepGrind(); showOrder(null); }, 900);
+}
+function stepGrind(){
+  G.phase='grind';
+  hideDock();
+  const grindLabel = v => v<0.34?'很细':v<0.45?'偏细':v<0.60?'适中':v<0.72?'偏粗':'很粗';
+  const toneLabel  = v => v<0.34?'音调尖 · 负荷重':v<0.45?'偏尖':v<0.60?'声音稳':v<0.72?'偏闷':'沉闷';
+  setDock({
+    name:'调磨 · 研磨度', tone:toneLabel(SIM.grind),
+    hint:'转动磨豆机的旋钮，<b>听音调、看粉的粗细</b>。拖动画面可以换视角。',
+    a:`<div class="knobrow"><div class="grindmeter" id="gmeter"><div class="pin" id="gpin"></div>
+        <div class="lbl" style="left:2px">细</div><div class="lbl" style="right:2px">粗</div></div>
+        <div class="tone" id="gTone">${grindLabel(SIM.grind)}</div></div>`,
+    b:'',
+    btns:[{label:'磨好了 →', primary:true, on:()=>{ Sfx.grinderStop(); stepDose(); }}]
+  });
+  const meter = $('gmeter'), pin = $('gpin');
+  const set = (cx)=>{
+    const r = meter.getBoundingClientRect();
+    SIM.grind = clamp((cx - r.left)/r.width, 0, 1);
+    pin.style.left = (SIM.grind*100)+'%';
+    $('gTone').textContent = grindLabel(SIM.grind);
+    $('toneVal').textContent = toneLabel(SIM.grind);
+    R.knob.rotation.z = -(SIM.grind-0.5)*5.6;
+    R.grounds.visible = true;
+    const s = 0.72 + SIM.grind*0.5;
+    R.grounds.scale.set(s,1,s);
+    R.grounds.material.color.setHSL(0.075, 0.55, lerp(0.20,0.34,SIM.grind));
+    Sfx.grinderTune(1-SIM.grind);
+  };
+  let down=false;
+  meter.addEventListener('pointerdown', e=>{ down=true; meter.setPointerCapture(e.pointerId); Sfx.grinderStart(); set(e.clientX); });
+  meter.addEventListener('pointermove', e=>{ if(down) set(e.clientX); });
+  meter.addEventListener('pointerup', ()=>{ down=false; Sfx.grinderStop(); });
+  meter.addEventListener('pointercancel', ()=>{ down=false; Sfx.grinderStop(); });
+  const sync = ()=>{ pin.style.left = (SIM.grind*100)+'%'; R.knob.rotation.z = -(SIM.grind-0.5)*5.6; };
+  sync();
+}
+function stepDose(){
+  G.phase='dose'; shot('prep');
+  R.grounds.visible = false;               // 粉倒进手柄了
+  setDock({
+    name:'布粉 · 粉量', hint:'按住<b>倒豆</b>，盯着秤。松开手就是这一杯的粉量<span style="opacity:.5">（这台机器常规 18g 上下）</span>',
+    a:`<div class="scale"><span class="label">粉量</span><span class="num" id="doseNum">0.0</span><span class="unit">g</span></div>`,
+    b:'',
+    btns:[{label:'按住倒豆', primary:true, id:'pour'}]
+  });
+  const btn = $('slotC').firstChild;
+  let t0=performance.now(), dose=0;
+  const tick = ()=>{
+    if(!G.pouring) return;
+    const dt = (performance.now()-t0)/1000; t0 = performance.now();
+    dose = Math.min(dose + dt*8.5, 30);
+    SIM.dose = dose;
+    $('doseNum').textContent = dose.toFixed(1);
+    drawScale(dose + rand(-0.12,0.12));
+    requestAnimationFrame(tick);
+  };
+  btn.addEventListener('pointerdown', ()=>{
+    if(G.phase!=='dose') return;
+    G.pouring = true; t0=performance.now(); Sfx.grinderStart();
+    btn.textContent = '…倒豆中…';
+  });
+  const stop = ()=>{
+    if(!G.pouring) return;
+    G.pouring=false; Sfx.grinderStop();
+    if(SIM.dose < 6) SIM.dose = 6;
+    $('doseNum').textContent = SIM.dose.toFixed(1);
+    drawScale(SIM.dose);
+    btn.textContent = '再加点';
+    btn.classList.remove('primary'); btn.classList.add('ghost');
+    setTimeout(()=>{
+      if(G.phase==='dose'){ Sfx.knock(); stepTamp(); }
+    }, 420);
+  };
+  btn.addEventListener('pointerup', stop);
+  btn.addEventListener('pointerleave', stop);
+  requestAnimationFrame(tick);
+}
+function stepTamp(){
+  G.phase='tamp';
+  setDock({
+    name:'压粉 · 手感', hint:'按住<b>压下去</b>，力道停在粉饼"实了但不死"的位置再松手。',
+    a:`<div class="grindmeter" id="tmeter"><div class="pin" id="tpin" style="left:0%"></div>
+       <div style="position:absolute;left:55%;top:-4px;width:25%;height:14px;border-radius:6px;
+            background:rgba(120,220,150,.32);border:1px solid rgba(150,240,180,.5)"></div></div>`,
+    b:'',
+    btns:[{label:'按住压粉', primary:true, id:'tamp'}]
+  });
+  const btn = $('slotC').firstChild, pin = $('tpin');
+  let p=0, up=true, raf=0, tl=performance.now();
+  const loop = ()=>{
+    if(!G.tamping) return;
+    const now = performance.now(), d = Math.min(0.05,(now-tl)/1000); tl = now;
+    p += (up?1:-1)*d*0.85;
+    if(p>1){ p=1; up=false; } if(p<0){ p=0; up=true; }
+    pin.style.left = (p*100)+'%';
+    raf = requestAnimationFrame(loop);
+  };
+  btn.addEventListener('pointerdown', ()=>{ if(G.phase!=='tamp')return; G.tamping=true; tl=performance.now(); loop(); });
+  const release = ()=>{
+    if(!G.tamping) return;
+    G.tamping=false; cancelAnimationFrame(raf);
+    const power = p;
+    Sfx.tamp(0.6+power*0.6);
+    SIM.tampQ = clamp(1 - Math.abs(power-0.675)/0.42, 0.05, 1);
+    rollChannel();
+    // 压粉反馈：偏轻/偏重都能"摸出来"
+    const feel = power<0.45?'粉饼松，边上没压实':power>0.88?'压太死，出不来水':'压得住';
+    $('hintText').innerHTML = `手感：${feel}`;
+    setTimeout(()=>stepLock(), 700);
+  };
+  btn.addEventListener('pointerup', release);
+  btn.addEventListener('pointerleave', release);
+}
+function stepLock(){
+  G.phase='lock'; shot('brew');
+  setDock({
+    name:'上机', hint:'把手柄扣进冲煮头。',
+    a:'', b:'',
+    btns:[{label:'扣上手柄', primary:true, on:()=>{
+      Sfx.click(); R.pfWant = 1; G.phase='ready';
+      banner('','',0);
+      setDock({
+        name:'萃取', hint:'盯住<b>液柱的颜色</b>和<b>秤上的克数</b>，在"刚刚好"的那一刻切断。' + (G.day===1?TIP_RULE:''),
+        a:`<div class="scale"><span class="label">液重</span><span class="num" id="yNum">0.0</span><span class="unit">g</span></div>`,
+        b:'',
+        btns:[{label:'开始萃取', primary:true, on:startBrew}]
+      });
+    }}]
+  });
+}
+function startBrew(){
+  G.phase='brew'; G.brewing=true; SIM.yieldG=0; SIM.brewT=0; G.brewFlow=flowNow();
+  Sfx.brewStart(); Sfx.steam(true);
+  R.steam.visible = true;
+  R.brew.visible = true; R.brew.scale.y = 0.0012; R.brew.position.y = 0.011;
+  R.crema.visible = false; R.cremaDecay = 0;
+  setDock({
+    name:'萃取中', hint:'<b>空格</b> 或按下方的键切断。蜂蜜般细流、金棕渐变 = 刚好。' + (G.day===1?TIP_RULE:''),
+    a:`<div class="scale"><span class="label">液重</span><span class="num" id="yNum">0.0</span><span class="unit">g</span></div>`,
+    b:'',
+    btns:[{label:'切 断', primary:true, on:cutBrew}]
+  });
+  $('slotC').firstChild.style.cssText='flex:1;padding:14px;background:linear-gradient(180deg,#e8674f,#c2472f);border-color:rgba(255,220,200,.5)';
+}
+function cutBrew(){
+  if(!G.brewing) return;
+  G.brewing=false; Sfx.brewStop(); Sfx.steam(false);
+  R.stream.visible=false; R.drops.visible=false; R.steam.visible=false;
+  const flow = G.brewFlow;
+  const fe = (flow - SIM.idealFlow)/SIM.idealFlow;   // >0 流得快（偏酸方向）
+  const ratio = SIM.yieldG/SIM.dose;
+  const re = (ratio - 2.0)/2.0;                      // >0 停得晚
+  // 萃取程度：流得快 + 停得早 = 不足（酸、水）；流得慢 + 停得晚 = 过度（苦、焦）
+  const taste = clamp(fe*0.75 - re*0.62, -1, 1);
+  const band = bandOf(taste);
+  // 视觉收尾：杯中液面 + crema
+  const fill = clamp(SIM.yieldG/46, 0.12, 0.92);
+  const quality = clamp(1 - Math.abs(taste)*2.0 - SIM.channel*0.85 - (clamp(1-SIM.tampQ,0,1))*0.45 - (SIM.beanAge-1)*0.05, 0, 1);
+  const h = Math.max(0.0015, fill*0.048);
+  R.brew.scale.y = h;
+  R.brew.position.y = 0.010 + h/2;
+  R.crema.position.y = 0.010 + h + 0.0012;
+  R.crema.visible = true;
+  R.cremaQ = quality; R.cremaDecay = 0; R.cremaRate = lerp(0.34, 0.012, quality);
+  const m = crema.material.uniforms; m.uQuality.value = quality; m.uDecay.value = 0;
+  brew.material.uniforms.uColA.value.setHSL(0.075,0.62,lerp(0.05,0.12,quality));
+  brew.material.uniforms.uColB.value.setHSL(0.065,0.58,lerp(0.16,0.30,quality));
+  R.pf.rotation.y = 0;
+  G.lastTaste = taste;
+  SIM.burrHeat = clamp(SIM.burrHeat + 0.16, 0, 0.6);
+  shot('closeup');
+  setTimeout(()=>serve(band, taste, fe, re), 700);
+}
+function serve(band, taste, fe, re){
+  G.phase='result';
+  const c = G.cust;
+  let stars='', quote='', tipAdd=0, tipText='';
+  if(G.isTestCup){
+    /* 测试杯：只有你自己的舌头 */
+    const dir = taste>0.14?'有点酸，收得太早了':taste<-0.14?'有点苦，走太远了':'甜感出来了，就是这个点';
+    quote = `你尝了一口——${dir}。`;
+    stars = '◆'.repeat(clamp(Math.round(3-Math.abs(taste)*5),1,3));
+    $('rWho').textContent = '你自己';
+    tipText = '记住今天的刻度：液柱是这个样子的时候，就对了。';
+  } else {
+    const delta = taste - c.prefer;
+    const a = Math.abs(delta);
+    let lvl = a <= c.tol*0.5 ? 3 : a <= c.tol ? 2 : a <= c.tol*1.9 ? 1 : 0;
+    let look = '';
+    if(lvl===3){
+      look = c.t==='老饕' ? '（他抬了下眼，没说话，喝完了）'
+           : c.t==='同行' ? '（他点了点头：流速压得漂亮）'
+           : c.t==='游客' ? '（先拍了三张照，然后一口气喝完）'
+           : c.t==='通勤客'? '（一口闷：够劲，走了！）' : '（眼睛亮了一下）';
+      tipAdd = Math.round(c.tip*2);
+    } else if(lvl===2){
+      look = '挺好喝。'; tipAdd = Math.round(c.tip*1.1);
+    } else if(lvl===1){
+      look = '挺好喝。（表情平淡）'; tipAdd = Math.round(c.tip*0.35);
+    } else {
+      look = delta > 0
+        ? (re < -0.34 ? '有点水。' : (c.t==='老饕'?'今天这个有点急了。':'有点酸。'))
+        : (taste < -0.45 ? '有点焦，喉干。' : '有点苦。');
+      if(SIM.channel>0.5 && Math.abs(delta)<0.5) look += '（喝着不太顺，前后不像同一杯）';
+      tipAdd = 0;
+    }
+    stars = '◆'.repeat(lvl) + '◇'.repeat(3-lvl);
+    quote = look;
+    $('rWho').textContent = c.t + ' · ' + c.tag;
+    tipText = tipAdd>0 ? `小费 ¥${tipAdd}` : '没有小费。';
+    G.tips += tipAdd; $('tipNum').textContent = G.tips;
+  }
+  $('rStars').textContent = stars;
+  $('rVerdict').textContent = band.name;
+  $('rFlavor').textContent = band.flavor;
+  $('rQuote').textContent = quote;
+  $('rTip').innerHTML = tipText + (SIM.channel>0.5?'<br><span style="opacity:.7">布粉没铺匀——液柱忽粗忽细就是它。</span>':'');
+  $('cupNum').textContent = G.cupIndex + 1;
+  $('rNext').textContent = G.isTestCup ? '开门营业' : (G.cupIndex>=2 ? '打烊' : '下一位');
+  hideDock(); hideOrder();
+  $('result').classList.add('show');
+  Sfx.chime(band.k==='good');
+  Sfx.cup();
+}
+$('rNext').onclick = ()=>{
+  $('result').classList.remove('show');
+  if(G.isTestCup){ G.isTestCup=false; G.cupIndex=0; nextCustomer(); }
+  else if(G.cupIndex>=2){ closeDay(); }
+  else { G.cupIndex++; nextCustomer(); }
+};
+function nextCustomer(){
+  G.cust = pickCustomer();
+  showOrder(G.cust);
+  R.pfWant = 0; Sfx.knock();
+  shot('grinder');
+  setTimeout(()=>stepGrind(), 500);
+}
+function closeDay(){
+  Sfx.knock();
+  banner('打 烊', `今天的小费 ¥${G.tips} · 明天豆子又会变`, 2600);
+  hideOrder(); hideDock();
+  setTimeout(()=>startDay(G.day+1), 2700);
+}
+
+/* ---------------- 每帧更新 ---------------- */
+let clock = 0;
+function updateSim(dt){
+  if(G.brewing){
+    const f = flowNow();
+    G.brewFlow = lerp(G.brewFlow, f, 0.06);
+    SIM.yieldG += G.brewFlow*dt;
+    SIM.brewT += dt;
+    const ratio = SIM.yieldG/SIM.dose;
+    const fe = updateStream(G.brewFlow, ratio);
+    drawScale(SIM.yieldG + rand(-0.06,0.06));
+    const n = $('yNum'); if(n) n.textContent = SIM.yieldG.toFixed(1);
+    Sfx.brewUpdate(clamp(G.brewFlow/2.4,0,1.2), clamp((-fe-0.15)/0.6,0,1)*0.7 + SIM.channel*0.5);
+    if(R.gauge) R.gauge.rotation.z = lerp(R.gauge.rotation.z, -1.0 + clamp(1.25-G.brewFlow*0.45,0,1.4)*1.9, 0.08);
+    R.steamMat.uniforms.uOpacity.value = lerp(R.steamMat.uniforms.uOpacity.value, 0.22, 0.05);
+    if(SIM.yieldG > SIM.dose*3.2) cutBrew();
+  } else {
+    if(R.steamMat) R.steamMat.uniforms.uOpacity.value = lerp(R.steamMat.uniforms.uOpacity.value, 0, 0.04);
+  }
+}
+function updateVisuals(dt){
+  clock += dt;
+  streamMat.uniforms.uTime.value = clock;
+  brewMat.uniforms.uTime.value = clock;
+  cremaMat.uniforms.uTime.value = clock;
+  R.shaftMat.uniforms.uTime.value = clock;
+  shafts.children.forEach(m=>{ m.material.uniforms.uTime.value = clock; });
+  R.dustMat.uniforms.uTime.value = clock;
+  R.dropMat.uniforms.uTime.value = clock;
+  R.steamMat.uniforms.uTime.value = clock;
+  postMat.uniforms.uTime.value = clock;
+  // crema 消散
+  if(R.crema.visible){
+    R.cremaDecay = (R.cremaDecay||0) + (R.cremaRate||0.02)*dt;
+    cremaMat.uniforms.uDecay.value = clamp(R.cremaDecay,0,1);
+  }
+  // 手柄：取下的位置 ↔ 扣进冲煮头的位置
+  if(R.pfWant !== undefined){
+    R.pfLock = lerp(R.pfLock ?? 1, R.pfWant, 0.12);
+    const k = R.pfLock;
+    R.pf.position.set(lerp(0.10,0,k), lerp(0.285,0.44,k), lerp(0.52,0.30,k));
+    R.pf.rotation.y = lerp(-0.85, 0, k);
+    R.pf.rotation.z = lerp(0.12, 0, k);
+  }
+  // 磨豆机轻微震动
+  if(G.phase==='grind') R.grinder.position.y = Math.sin(clock*24)*0.0015;
+  else R.grinder.position.y = 0;
+  // 蒸汽：打奶时可见（这里只在萃取时轻微冒）
+  R.steam.visible = G.brewing || (R.steamMat.uniforms.uOpacity.value > 0.02 && !G.brewing);
+}
+
+/* ---------------- 主循环 ---------------- */
+function resize(){
+  const w = innerWidth, h = innerHeight, dpr = Math.min(devicePixelRatio,2);
+  renderer.setSize(w,h); camera.aspect = w/h; camera.updateProjectionMatrix();
+  rt.setSize(w*dpr, h*dpr);
+  postMat.uniforms.uRes.value.set(w*dpr, h*dpr);
+}
+addEventListener('resize', resize); resize();
+drawScale(0);
+
+let last = performance.now();
+function loop(now){
+  const dt = Math.min(0.1,(now-last)/1000); last = now;
+  updateCamera(dt); updateSim(dt); updateVisuals(dt);
+  renderer.setRenderTarget(rt); renderer.render(scene, camera);
+  renderer.setRenderTarget(null); renderer.render(postScene, postCam);
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+$('loading').classList.add('out');
+
+/* ---------------- 输入 ---------------- */
+window.__DBG = {G, SIM, R, flowNow, effGrind, bandOf};
+addEventListener('keydown', e=>{
+  if(e.code==='Space'){ e.preventDefault();
+    if(G.brewing) cutBrew();
+    else { const b=$('slotC').firstChild; if(b) b.click(); }
+  }
+  if(e.key==='h'||e.key==='H') $('help').classList.toggle('show');
+});
+$('helpBtn').onclick = ()=>$('help').classList.add('show');
+$('helpClose').onclick = ()=>$('help').classList.remove('show');
+$('startBtn').onclick = ()=>{
+  Sfx.init(); Sfx.cup();
+  $('intro').classList.add('out');
+  setTimeout(()=>startDay(1), 700);
+};
+
+</script>
+</body>
+</html>
