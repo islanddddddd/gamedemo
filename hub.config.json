@@ -14,5 +14,9 @@
     "description": "用沙与石，造一座只属于此刻的庭院",
     "thumbnail": "preview.png",
     "review": "纯答辩"
+  },
+  "晨间萃取": {
+    "title": "晨间萃取",
+    "description": "风格化 3D 渲染的咖啡萃取模拟 —— three.js 还原清晨手冲的一刻"
   }
 }
