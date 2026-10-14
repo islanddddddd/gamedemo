@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>弹跳球 · 单关卡 Canvas 物理小游戏</title>
+<style>
+  :root{
+    --bg:#08090d; --panel:#11141b; --line:#232833;
+    --fg:#e8ecf3; --dim:#8b93a3;
+    --orange:#ff8a3d; --orange-d:#c95f1c; --cyan:#35e0c0; --red:#ff4d5e;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{
+    background:var(--bg); color:var(--fg);
+    font:14px/1.6 system-ui,-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    display:flex; flex-direction:column; overflow:hidden;
+    -webkit-user-select:none; user-select:none;
+  }
+  header.bar{
+    flex:0 0 auto; display:flex; align-items:center; gap:18px; flex-wrap:wrap;
+    padding:10px 16px; background:linear-gradient(180deg,#14181f,#0e1116);
+    border-bottom:1px solid var(--line);
+  }
+  .brand{font-weight:700; letter-spacing:.5px; color:var(--orange); font-size:15px}
+  .brand span{color:var(--dim); font-weight:400; font-size:12px; margin-left:6px}
+  .stats{display:flex; align-items:center; gap:16px; margin-left:auto; flex-wrap:wrap}
+  .stat{display:flex; align-items:baseline; gap:6px}
+  .stat label{color:var(--dim); font-size:12px}
+  .stat b{font-variant-numeric:tabular-nums; font-size:15px; min-width:44px}
+  .energy{display:flex; align-items:center; gap:6px}
+  .energy label{color:var(--dim); font-size:12px}
+  .cells{display:flex; gap:3px}
+  .cell{width:14px;height:14px;border-radius:3px;background:#20252f;border:1px solid #2c323e}
+  .cell.on{background:linear-gradient(180deg,#ffb066,var(--orange));border-color:var(--orange-d);box-shadow:0 0 8px rgba(255,138,61,.6)}
+  .btns{display:flex; gap:8px}
+  button{
+    font:inherit; font-size:12px; color:var(--fg); background:#1b2029; border:1px solid #2c323e;
+    padding:5px 12px; border-radius:6px; cursor:pointer;
+  }
+  button:hover{border-color:var(--orange); color:var(--orange)}
+  main#stage{flex:1 1 auto; position:relative; min-height:0; background:#050609}
+  canvas{display:block; width:100%; height:100%; touch-action:none; cursor:crosshair}
+  #overlay{
+    position:absolute; inset:0; display:none; align-items:center; justify-content:center;
+    background:rgba(6,8,12,.72); backdrop-filter:blur(3px);
+  }
+  #overlay.show{display:flex}
+  .card{
+    background:var(--panel); border:1px solid #2b3140; border-radius:14px; padding:22px 28px;
+    text-align:center; box-shadow:0 20px 60px rgba(0,0,0,.6); min-width:280px;
+  }
+  .card h2{margin:0 0 6px; font-size:22px; color:var(--cyan)}
+  .card p{margin:4px 0; color:var(--dim); font-size:13px}
+  .card .big{font-size:26px; color:var(--orange); font-variant-numeric:tabular-nums; margin:8px 0}
+  section#notes{
+    flex:0 0 auto; max-height:236px; overflow:auto; padding:12px 18px 18px;
+    background:#0b0d12; border-top:1px solid var(--line); color:#c3cad6; font-size:13px;
+  }
+  section#notes h2{font-size:14px; color:var(--orange); margin:0 0 8px}
+  section#notes ol{margin:0; padding-left:20px}
+  section#notes li{margin:5px 0}
+  section#notes code{
+    background:#171b23; border:1px solid #262c37; border-radius:4px; padding:1px 5px;
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:12px; color:#ffcf9b;
+  }
+  table.params{border-collapse:collapse; margin:8px 0 4px; font-size:12px}
+  table.params td,table.params th{border:1px solid #262c37; padding:3px 10px; text-align:left}
+  table.params th{color:var(--dim); background:#12161d}
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <div class="brand">● 弹跳球 <span>单关卡 · 固定步长 + 连续碰撞检测</span></div>
+  <div class="stats">
+    <div class="stat"><label>星星</label><b id="s-star">0/5</b></div>
+    <div class="stat"><label>时间</label><b id="s-time">0.00s</b></div>
+    <div class="stat"><label>冲量</label><b id="s-click">0</b></div>
+    <div class="stat"><label>坠落</label><b id="s-dead">0</b></div>
+    <div class="energy"><label>能量</label><div class="cells" id="s-energy"></div></div>
+  </div>
+  <div class="btns">
+    <button id="btn-pause">暂停 (P)</button>
+    <button id="btn-reset">重开 (R)</button>
+  </div>
+</header>
+
+<main id="stage">
+  <canvas id="cv"></canvas>
+  <div id="overlay">
+    <div class="card">
+      <h2 id="ov-title">通关！</h2>
+      <div class="big" id="ov-time">0.00s</div>
+      <p id="ov-line1">冲量次数 0 · 坠落 0</p>
+      <p id="ov-line2">最佳 ——</p>
+      <button id="ov-btn" style="margin-top:12px">再来一局 (R)</button>
+    </div>
+  </div>
+</main>
+
+<section id="notes">
+  <h2>实现说明</h2>
+  <ol>
+    <li><b>固定时间步长 + 累加器</b>：物理步长恒为 <code>dt = 1/120 s</code>；每帧把真实帧时间累加进 accumulator，
+        <code>while(acc &gt;= dt) step(dt)</code>。帧时间上限截断为 0.2 s、单帧最多 24 步并丢弃积压，避免切后台后的“死亡螺旋”。
+        渲染用剩余时间比例 <code>alpha = acc/dt</code> 在上一物理状态与当前状态之间插值，因此 30 Hz / 60 Hz / 144 Hz 下手感与轨迹完全一致。</li>
+    <li><b>帧率无关</b>：所有积分、阻尼、计时、移动平台的相位都只依赖 <code>dt</code>，不使用“每帧减一点”的写法；
+        <code>requestAnimationFrame</code> 只负责喂时间，不影响物理结果。</li>
+    <li><b>连续碰撞检测（CCD）防穿透</b>：每个物理步内做“扫掠求解”而非“先移动再判定”。把障碍按球半径做 Minkowski 膨胀（矩形 + 四角圆角的圆角矩形），
+        对膨胀体做 slab 求交得到最早命中时刻 <code>t∈[0,1]</code>；若命中点落在角落区域，再退化成“射线 vs 角点圆”求精确根。
+        障碍用 OBB 表示，射线与圆心变换到障碍局部坐标系求解，法线再旋转回世界，因此斜坡也能精确处理。
+        球被推进到命中点 + <code>skin=0.05</code> 的分离量，剩余时间继续迭代（每步最多 8 次），速度 2500 px/s 也不会穿过 18 px 厚的薄板。</li>
+    <li><b>不抖动</b>：① 法向速度低于阈值（60 px/s）时弹性系数取 0，不再弹跳；② 识别 resting contact（法线朝上）后，
+        下一步把重力沿接触法线的向内分量剔除（重力补偿），球不会“下沉—被顶回”地循环；③ 切向摩擦衰减；④ 接触时外推 skin 并用命中点直接赋值球心，避免浮点累积；
+        ⑤ 静止吸附：支撑状态下合速度 &lt; 5 px/s 直接归零。</li>
+    <li><b>碰撞响应</b>：在障碍参考系中使用相对速度 <code>v_rel = v_ball − v_obstacle</code> 分解法向/切向，
+        <code>v_n' = −e·v_n</code>、<code>v_t' = (1−μ)·v_t</code>，再叠回障碍速度，所以站在移动平台上会被正确带走。</li>
+    <li><b>鼠标冲量</b>：点击/触摸时按“球 → 点击点”的方向施加冲量，大小随距离在 180–700 px/s 之间钳制；消耗 1 格能量，能量按物理时间恢复。</li>
+  </ol>
+  <table class="params">
+    <tr><th>参数</th><th>值</th><th>参数</th><th>值</th></tr>
+    <tr><td>重力 G</td><td>1600 px/s²</td><td>弹性系数 e</td><td>0.62（弹跳板 1.30）</td></tr>
+    <tr><td>固定步长 dt</td><td>1/120 s</td><td>切向摩擦 μ</td><td>0.15</td></tr>
+    <tr><td>空气阻力</td><td>0.25 /s（指数）</td><td>静止阈值</td><td>法向 60 px/s</td></tr>
+    <tr><td>最大速度</td><td>2500 px/s</td><td>分离量 skin</td><td>0.05 px</td></tr>
+  </table>
+</section>
+
+<script>
+(() => {
+'use strict';
+
+// ---------- 常量：世界单位为固定逻辑像素，与屏幕无关 ----------
+const W = 1280, H = 720;
+const DT = 1 / 120;          // 固定物理步长
+const MAX_FRAME = 0.2;       // 单帧最大时间（防死亡螺旋）
+const MAX_STEPS = 24;        // 单帧最大物理步数
+const G = 1600;              // 重力加速度 px/s^2
+const R = 14;                // 球半径
+const RESTITUTION = 0.62;    // 默认弹性系数
+const FRICTION = 0.15;       // 切向摩擦比例
+const AIR_DRAG = 0.25;       // 空气阻力系数 (1/s)
+const MAX_SPEED = 2500;      // 速度上限
+const REST_VEL = 60;         // 低于此法向速度不再反弹
+const SLEEP_VEL = 5;         // 支撑状态下的静止吸附阈值
+const SKIN = 0.05;           // 分离量
+const SOLVER_ITER = 8;       // 单步最大碰撞迭代次数
+const IMP_MIN = 180, IMP_MAX = 700, IMP_RANGE = 300;
+const ENERGY_MAX = 5, ENERGY_RECHARGE = 0.35; // 秒 / 格
+
+const clamp = (v, a, b) => v < a ? a : (v > b ? b : v);
+const lerp = (a, b, t) => a + (b - a) * t;
+
+// ---------- DOM ----------
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d', { alpha: false });
+const stage = document.getElementById('stage');
+const overlay = document.getElementById('overlay');
+const el = {
+  star: document.getElementById('s-star'),
+  time: document.getElementById('s-time'),
+  click: document.getElementById('s-click'),
+  dead: document.getElementById('s-dead'),
+  energy: document.getElementById('s-energy'),
+  ovTitle: document.getElementById('ov-title'),
+  ovTime: document.getElementById('ov-time'),
+  ov1: document.getElementById('ov-line1'),
+  ov2: document.getElementById('ov-line2'),
+};
+for (let i = 0; i < ENERGY_MAX; i++) {
+  const d = document.createElement('div');
+  d.className = 'cell on';
+  el.energy.appendChild(d);
+}
+const cells = [...el.energy.children];
+
+// ---------- 视口（letterbox 缩放，保证世界坐标恒定） ----------
+const view = { s: 1, dpr: 1, ox: 0, oy: 0 };
+function resize() {
+  const r = stage.getBoundingClientRect();
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  cv.width = Math.max(1, Math.round(r.width * dpr));
+  cv.height = Math.max(1, Math.round(r.height * dpr));
+  cv.style.width = r.width + 'px';
+  cv.style.height = r.height + 'px';
+  const s = Math.min(r.width / W, r.height / H);
+  view.s = s; view.dpr = dpr;
+  view.ox = (r.width - W * s) / 2;
+  view.oy = (r.height - H * s) / 2;
+}
+new ResizeObserver(resize).observe(stage);
+window.addEventListener('resize', resize);
+
+// ---------- 关卡数据 ----------
+const SPAWN = { x: 110, y: 90 };
+const LAVA = { x0: 380, x1: 900, top: 676 };
+const DOOR = { x: 1190, y: 250, hw: 35, hh: 50 };
+const STAR_POS = [
+  { x: 180, y: 500 }, { x: 520, y: 396 }, { x: 826, y: 330 },
+  { x: 660, y: 596 }, { x: 1140, y: 212 },
+];
+
+const obstacles = [];
+function addBox(left, top, w, h, opts) {
+  opts = opts || {};
+  const o = {
+    x: left + w / 2, y: top + h / 2, hw: w / 2, hh: h / 2,
+    angle: opts.angle || 0, vx: 0, vy: 0,
+    restitution: opts.restitution, friction: opts.friction,
+    kind: opts.kind || 'solid', t: 0, bx: 0, range: 0, w: 0,
+  };
+  o.cos = Math.cos(o.angle); o.sin = Math.sin(o.angle);
+  obstacles.push(o);
+  return o;
+}
+function addBoxC(cx, cy, w, h, opts) {
+  opts = opts || {};
+  return addBox(cx - w / 2, cy - h / 2, w, h, opts);
+}
+
+// 边界（厚墙，参与同一套扫掠求解）
+addBox(-60, -300, 60, 1400);              // 左墙
+addBox(W, -300, 60, 1400);                // 右墙
+addBox(-200, -60, W + 400, 60);           // 天花板
+addBox(0, 676, 380, 120);                 // 地面 A
+addBox(900, 676, 380, 120);               // 地面 B
+// 关卡几何
+addBox(60, 560, 250, 18);                 // 平台 P1
+addBox(400, 470, 250, 18);                // 平台 P2
+addBox(655, 640, 130, 16);                // 岩浆上方救命小台
+addBoxC(830, 400, 240, 18, { angle: -0.28 });            // 斜坡（OBB）
+addBox(1030, 300, 220, 18);               // 终点高台
+addBoxC(985, 665, 90, 22, { restitution: 1.30, kind: 'bouncer' }); // 弹跳板
+const mover = addBoxC(520, 620, 110, 16, { kind: 'mover' });       // 移动平台
+mover.bx = mover.x; mover.range = 130; mover.w = 0.85;
+
+// ---------- 运行时状态 ----------
+const ball = { x: 0, y: 0, vx: 0, vy: 0, px: 0, py: 0, tp: false };
+let stars = [], particles = [], ripples = [], trail = [];
+let time = 0, clicks = 0, deaths = 0, energy = ENERGY_MAX, eTimer = 0;
+let won = false, paused = false, debug = false;
+let groundN = null, lastContact = null, stepsLastFrame = 0;
+let best = null;
+try { best = parseFloat(localStorage.getItem('bounce_best')); } catch (e) { best = null; }
+if (!isFinite(best)) best = null;
+
+function reset(full) {
+  ball.x = ball.px = SPAWN.x; ball.y = ball.py = SPAWN.y;
+  ball.vx = ball.vy = 0; ball.tp = true;
+  groundN = null; lastContact = null;
+  if (full) {
+    stars = STAR_POS.map(p => ({ x: p.x, y: p.y, r: 16, got: false, spin: Math.random() * 6 }));
+    time = 0; clicks = 0; deaths = 0; energy = ENERGY_MAX; eTimer = 0; won = false;
+    particles.length = 0; ripples.length = 0; trail.length = 0;
+    for (const ob of obstacles) { ob.t = 0; if (ob.kind === 'mover') ob.x = ob.bx; }
+    overlay.classList.remove('show');
+  } else {
+    particles.length = 0; trail.length = 0;
+  }
+}
+reset(true);
+
+// ---------- 扫掠：圆 vs OBB（Minkowski 膨胀 + 圆角矩形精确求根） ----------
+// 返回 {t, nx, ny, depth, hx, hy}（法线与命中点为世界/局部混合：法线世界，hx/hy 为障碍局部命中点）
+function sweep(px, py, dx, dy, ob) {
+  const ca = ob.cos, sa = ob.sin;
+  const ox = px - ob.x, oy = py - ob.y;
+  // 变换到障碍局部坐标：R(-a)
+  const lox = ca * ox + sa * oy, loy = -sa * ox + ca * oy;
+  const ldx = ca * dx + sa * dy, ldy = -sa * dx + ca * dy;
+  const hw = ob.hw, hh = ob.hh;
+
+  // (1) 起点已重叠：最近点法线 + 穿透深度
+  const qx = clamp(lox, -hw, hw), qy = clamp(loy, -hh, hh);
+  let ex = lox - qx, ey = loy - qy;
+  const d2 = ex * ex + ey * ey;
+  let nx, ny;
+  if (d2 < R * R - 1e-6) {
+    const d = Math.sqrt(d2);
+    if (d > 1e-6) { nx = ex / d; ny = ey / d; }
+    else { // 圆心落在盒内：推向最近的边
+      const dxl = hw - Math.abs(lox), dyl = hh - Math.abs(loy);
+      if (dxl < dyl) { nx = lox >= 0 ? 1 : -1; ny = 0; } else { nx = 0; ny = loy >= 0 ? 1 : -1; }
+    }
+    return { t: 0, nx: ca * nx - sa * ny, ny: sa * nx + ca * ny, depth: R - d, hx: lox, hy: loy, ob };
+  }
+
+  // (2) 膨胀体 slab 求交
+  const eX = hw + R, eY = hh + R;
+  let tEnter = 0, tExit = 1, axis = -1, sgn = 0;
+  if (Math.abs(ldx) < 1e-12) {
+    if (lox < -eX || lox > eX) return null;
+  } else {
+    let a1 = (-eX - lox) / ldx, a2 = (eX - lox) / ldx;
+    if (a1 > a2) { const t = a1; a1 = a2; a2 = t; }
+    if (a1 > tEnter) { tEnter = a1; axis = 0; sgn = ldx > 0 ? -1 : 1; }
+    if (a2 < tExit) tExit = a2;
+    if (tEnter > tExit) return null;
+  }
+  if (Math.abs(ldy) < 1e-12) {
+    if (loy < -eY || loy > eY) return null;
+  } else {
+    let b1 = (-eY - loy) / ldy, b2 = (eY - loy) / ldy;
+    if (b1 > b2) { const t = b1; b1 = b2; b2 = t; }
+    if (b1 > tEnter) { tEnter = b1; axis = 1; sgn = ldy > 0 ? -1 : 1; }
+    if (b2 < tExit) tExit = b2;
+    if (tEnter > tExit) return null;
+  }
+  if (axis < 0) return null; // 起点在膨胀体内但尚未真正接触（角落方角区）
+
+  const hx = lox + ldx * tEnter, hy = loy + ldy * tEnter;
+  let lxn, lyn;
+  if (axis === 0 && hy >= -hh && hy <= hh) { lxn = sgn; lyn = 0; }
+  else if (axis === 1 && hx >= -hw && hx <= hw) { lxn = 0; lyn = sgn; }
+  else {
+    // 命中角落：退化为射线 vs 角点圆
+    const cx2 = (axis === 0) ? (sgn > 0 ? hw : -hw) : (hx > hw ? hw : -hw);
+    const cy2 = (axis === 1) ? (sgn > 0 ? hh : -hh) : (hy > hh ? hh : -hh);
+    const mx = lox - cx2, my = loy - cy2;
+    const A = ldx * ldx + ldy * ldy;
+    if (A < 1e-12) return null;
+    const B = 2 * (mx * ldx + my * ldy);
+    const C = mx * mx + my * my - R * R;
+    const disc = B * B - 4 * A * C;
+    if (disc < 0) return null;
+    const sq = Math.sqrt(disc);
+    let tt = (-B - sq) / (2 * A);
+    if (tt < 0) tt = (-B + sq) / (2 * A);
+    if (tt < 0 || tt > 1) return null;
+    const px2 = lox + ldx * tt, py2 = loy + ldy * tt;
+    let ax = px2 - cx2, ay = py2 - cy2;
+    const len = Math.hypot(ax, ay) || 1;
+    return {
+      t: tt, nx: ca * (ax / len) - sa * (ay / len), ny: sa * (ax / len) + ca * (ay / len),
+      depth: 0, hx: px2, hy: py2, ob,
+    };
+  }
+  return { t: tEnter, nx: ca * lxn - sa * lyn, ny: sa * lxn + ca * lyn, depth: 0, hx, hy, ob };
+}
+
+// ---------- 碰撞响应（相对速度 + 摩擦 + 静止判定） ----------
+function respond(ob, nx, ny) {
+  const rvx = ball.vx - ob.vx, rvy = ball.vy - ob.vy;
+  const vn = rvx * nx + rvy * ny;
+  lastContact = { x: nx, y: ny };
+  if (vn >= 0) return;                       // 已在分离，不改速度
+  const speedN = -vn;
+  const e = speedN < REST_VEL ? 0 : (ob.restitution != null ? ob.restitution : RESTITUTION);
+  const f = 1 - (ob.friction != null ? ob.friction : FRICTION);
+  const tvx = (rvx - nx * vn) * f, tvy = (rvy - ny * vn) * f;
+  const nvn = -e * vn;                       // e=0 时法向速度归零
+  ball.vx = tvx + nx * nvn + ob.vx;
+  ball.vy = tvy + ny * nvn + ob.vy;
+  if (speedN < REST_VEL && ny < -0.3) groundN = { x: nx, y: ny };  // 支撑接触
+  if (speedN > 240) sparks(ball.x - nx * R, ball.y - ny * R, nx, ny, Math.min(10, 3 + speedN / 160));
+}
+
+// ---------- 一个固定物理步 ----------
+function step(dt) {
+  // 移动平台：相位由物理时间驱动，帧率无关
+  for (const ob of obstacles) {
+    if (ob.kind !== 'mover') continue;
+    ob.t += dt;
+    const ph = ob.t * ob.w;
+    ob.x = ob.bx + Math.sin(ph) * ob.range;
+    ob.vx = Math.cos(ph) * ob.w * ob.range;
+  }
+
+  // 积分（半隐式欧拉）；支撑接触时剔除重力沿法线的向内分量 → 不抖动
+  let ax = 0, ay = G;
+  if (groundN) {
+    const d = groundN.x * ax + groundN.y * ay;
+    if (d < 0) { ax -= groundN.x * d; ay -= groundN.y * d; }
+  }
+  groundN = null;
+  ball.vx += ax * dt; ball.vy += ay * dt;
+  const drag = Math.exp(-AIR_DRAG * dt);
+  ball.vx *= drag; ball.vy *= drag;
+  const sp = Math.hypot(ball.vx, ball.vy);
+  if (sp > MAX_SPEED) { ball.vx *= MAX_SPEED / sp; ball.vy *= MAX_SPEED / sp; }
+
+  ball.px = ball.x; ball.py = ball.y; ball.tp = false;
+
+  // 扫掠求解：把这一整步的时间切成若干段，逐段推进到最早命中点
+  let remain = dt, iter = 0;
+  while (remain > 1e-9 && iter++ < SOLVER_ITER) {
+    let best = null;
+    for (const ob of obstacles) {
+      const dx = (ball.vx - ob.vx) * remain, dy = (ball.vy - ob.vy) * remain;
+      const hit = sweep(ball.x, ball.y, dx, dy, ob);
+      if (hit && (!best || hit.t < best.t)) best = hit;
+    }
+    if (!best) break;
+    const t = best.t, ob = best.ob;
+    // 推进到命中时刻（球用自身速度，障碍用自身速度，相对关系保持一致）
+    for (const o of obstacles) { o.x += o.vx * remain * t; o.y += o.vy * remain * t; }
+    ball.x += ball.vx * remain * t; ball.y += ball.vy * remain * t;
+    // 用命中点直接赋值球心（避免浮点累积）并外推 skin
+    const hxw = ob.x + (ob.cos * best.hx - ob.sin * best.hy);
+    const hyw = ob.y + (ob.sin * best.hx + ob.cos * best.hy);
+    const push = (best.depth || 0) + SKIN;
+    ball.x = hxw + best.nx * push;
+    ball.y = hyw + best.ny * push;
+    respond(ob, best.nx, best.ny);
+    ball.tp = true;
+    remain *= (1 - t);
+  }
+  for (const o of obstacles) { o.x += o.vx * remain; o.y += o.vy * remain; }
+  ball.x += ball.vx * remain; ball.y += ball.vy * remain;
+  if (groundN && Math.hypot(ball.vx, ball.vy) < SLEEP_VEL) { ball.vx = 0; ball.vy = 0; }
+
+  // 计时 / 能量
+  time += dt;
+  if (energy < ENERGY_MAX) {
+    eTimer += dt;
+    while (eTimer >= ENERGY_RECHARGE && energy < ENERGY_MAX) { eTimer -= ENERGY_RECHARGE; energy++; }
+  } else eTimer = 0;
+
+  // 星星
+  for (const s of stars) {
+    if (s.got) continue;
+    s.spin += dt * 2.2;
+    if (Math.hypot(ball.x - s.x, ball.y - s.y) < R + s.r) {
+      s.got = true;
+      burst(s.x, s.y, '#ffd27a', 16);
+    }
+  }
+
+  // 危险：岩浆
+  if (ball.y > LAVA.top && ball.x > LAVA.x0 && ball.x < LAVA.x1) {
+    deaths++;
+    burst(ball.x, ball.y, '#ff6a4d', 22);
+    reset(false);
+    return;
+  }
+  // 兜底：极端情况出界
+  if (ball.y > H + 600 || ball.x < -400 || ball.x > W + 400) { deaths++; reset(false); return; }
+
+  // 终点门
+  if (stars.every(s => s.got) &&
+      Math.abs(ball.x - DOOR.x) < DOOR.hw && Math.abs(ball.y - DOOR.y) < DOOR.hh) {
+    win();
+  }
+
+  // 粒子 / 涟漪
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.life -= dt;
+    if (p.life <= 0) { particles.splice(i, 1); continue; }
+    p.vy += G * 0.35 * dt;
+    p.x += p.vx * dt; p.y += p.vy * dt;
+    p.vx *= Math.exp(-1.6 * dt);
+  }
+  for (let i = ripples.length - 1; i >= 0; i--) {
+    ripples[i].life -= dt;
+    if (ripples[i].life <= 0) ripples.splice(i, 1);
+  }
+
+  trail.push(ball.x, ball.y);
+  if (trail.length > 60) trail.splice(0, trail.length - 60);
+}
+
+function win() {
+  won = true;
+  burst(DOOR.x, DOOR.y, '#35e0c0', 40);
+  if (best == null || time < best) {
+    best = time;
+    try { localStorage.setItem('bounce_best', String(best)); } catch (e) {}
+  }
+  el.ovTitle.textContent = '通关！';
+  el.ovTime.textContent = time.toFixed(2) + 's';
+  el.ov1.textContent = '冲量次数 ' + clicks + ' · 坠落 ' + deaths;
+  el.ov2.textContent = '最佳 ' + best.toFixed(2) + 's';
+  overlay.classList.add('show');
+}
+
+function burst(x, y, color, n) {
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2, s = 90 + Math.random() * 320;
+    particles.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 0.5 + Math.random() * 0.5, max: 1, color });
+  }
+}
+function sparks(x, y, nx, ny, n) {
+  for (let i = 0; i < n; i++) {
+    const a = Math.atan2(ny, nx) + (Math.random() - 0.5) * 1.6;
+    const s = 80 + Math.random() * 220;
+    particles.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 0.18 + Math.random() * 0.22, max: 0.4, color: '#ffb066' });
+  }
+}
+
+// ---------- 输入 ----------
+function toWorld(e) {
+  const r = cv.getBoundingClientRect();
+  return {
+    x: (e.clientX - r.left - view.ox) / view.s,
+    y: (e.clientY - r.top - view.oy) / view.s,
+  };
+}
+function applyImpulse(wx, wy) {
+  if (won || paused) return;
+  if (energy < 1) { ripples.push({ x: wx, y: wy, life: 0.25, bad: true }); return; }
+  const dx = wx - ball.x, dy = wy - ball.y;
+  const d = Math.hypot(dx, dy);
+  if (d < 1) return;
+  const k = IMP_MIN + (IMP_MAX - IMP_MIN) * Math.min(1, d / IMP_RANGE);
+  ball.vx += (dx / d) * k;
+  ball.vy += (dy / d) * k;
+  const sp = Math.hypot(ball.vx, ball.vy);
+  if (sp > MAX_SPEED) { ball.vx *= MAX_SPEED / sp; ball.vy *= MAX_SPEED / sp; }
+  energy--; eTimer = 0; clicks++;
+  ripples.push({ x: wx, y: wy, life: 0.4, bad: false });
+  burst(wx, wy, '#ff8a3d', 6);
+}
+cv.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  try { cv.setPointerCapture && cv.setPointerCapture(e.pointerId); } catch (err) { /* 合成事件可能无活动指针 */ }
+  const w = toWorld(e);
+  applyImpulse(w.x, w.y);
+});
+window.addEventListener('keydown', e => {
+  const k = e.key.toLowerCase();
+  if (k === 'r') { reset(true); paused = false; }
+  else if (k === 'p' || k === ' ') { paused = !paused; e.preventDefault(); }
+  else if (k === 'd') debug = !debug;
+});
+document.getElementById('btn-reset').onclick = () => { reset(true); paused = false; };
+document.getElementById('btn-pause').onclick = () => { paused = !paused; };
+document.getElementById('ov-btn').onclick = () => { reset(true); paused = false; };
+
+// ---------- 绘制 ----------
+function roundRect(g, x, y, w, h, r) {
+  g.beginPath();
+  g.moveTo(x + r, y);
+  g.arcTo(x + w, y, x + w, y + h, r);
+  g.arcTo(x + w, y + h, x, y + h, r);
+  g.arcTo(x, y + h, x, y, r);
+  g.arcTo(x, y, x + w, y, r);
+  g.closePath();
+}
+function starPath(g, x, y, r, rot) {
+  g.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const rr = (i % 2) ? r * 0.45 : r;
+    const a = rot + i * Math.PI / 5 - Math.PI / 2;
+    const px = x + Math.cos(a) * rr, py = y + Math.sin(a) * rr;
+    i ? g.lineTo(px, py) : g.moveTo(px, py);
+  }
+  g.closePath();
+}
+
+function draw(alpha) {
+  const { dpr, s, ox, oy } = view;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = '#050609';
+  ctx.fillRect(0, 0, cv.width, cv.height);
+  ctx.setTransform(dpr * s, 0, 0, dpr * s, dpr * ox, dpr * oy);
+  ctx.save();
+  ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.clip();
+
+  // 背景
+  const bg = ctx.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, '#121722'); bg.addColorStop(1, '#0a0c12');
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = 'rgba(255,255,255,.035)'; ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let x = 0; x <= W; x += 64) { ctx.moveTo(x, 0); ctx.lineTo(x, H); }
+  for (let y = 0; y <= H; y += 64) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
+  ctx.stroke();
+
+  // 岩浆
+  const lg = ctx.createLinearGradient(0, LAVA.top, 0, H);
+  lg.addColorStop(0, '#ff7a3d'); lg.addColorStop(.4, '#e03131'); lg.addColorStop(1, '#5c0f12');
+  ctx.fillStyle = lg;
+  ctx.beginPath();
+  ctx.moveTo(LAVA.x0, H);
+  ctx.lineTo(LAVA.x0, LAVA.top);
+  for (let x = LAVA.x0; x <= LAVA.x1; x += 12) {
+    ctx.lineTo(x, LAVA.top + Math.sin(x * 0.05 + time * 3) * 4 + Math.sin(x * 0.017 - time * 2) * 3);
+  }
+  ctx.lineTo(LAVA.x1, H);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = 'rgba(255,220,150,.20)';
+  ctx.fillRect(LAVA.x0, LAVA.top - 3, LAVA.x1 - LAVA.x0, 4);
+
+  // 障碍
+  for (const ob of obstacles) {
+    if (ob.kind === 'solid' && ob.hw > 400) continue; // 边界墙不画（由地面/边框表现）
+    ctx.save();
+    ctx.translate(ob.x, ob.y); ctx.rotate(ob.angle);
+    const w = ob.hw * 2, h = ob.hh * 2;
+    if (ob.kind === 'bouncer') {
+      const g = ctx.createLinearGradient(0, -h / 2, 0, h / 2);
+      g.addColorStop(0, '#ffd27a'); g.addColorStop(1, '#ff8a3d');
+      ctx.fillStyle = g; roundRect(ctx, -w / 2, -h / 2, w, h, 6); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,240,200,.9)'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.fillStyle = 'rgba(0,0,0,.45)';
+      for (let i = -1; i <= 1; i++) ctx.fillRect(i * 20 - 8, -h / 2 + 4, 16, 3);
+    } else if (ob.kind === 'mover') {
+      ctx.fillStyle = '#2a3242'; roundRect(ctx, -w / 2, -h / 2, w, h, 5); ctx.fill();
+      ctx.strokeStyle = '#35e0c0'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.fillStyle = 'rgba(53,224,192,.35)';
+      ctx.fillRect(-w / 2 + 6, -h / 2 + 3, w - 12, 2);
+    } else if (ob.hw > 150 && ob.hh < 40) { // 平台
+      const g = ctx.createLinearGradient(0, -h / 2, 0, h / 2);
+      g.addColorStop(0, '#39435a'); g.addColorStop(1, '#202736');
+      ctx.fillStyle = g; roundRect(ctx, -w / 2, -h / 2, w, h, 4); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,138,61,.35)'; ctx.lineWidth = 1.5; ctx.stroke();
+    } else { // 墙体 / 斜坡
+      ctx.fillStyle = '#1a1f2b'; roundRect(ctx, -w / 2, -h / 2, w, h, 3); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,.07)'; ctx.lineWidth = 1; ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // 终点门
+  const opened = stars.every(s => s.got);
+  ctx.save();
+  ctx.translate(DOOR.x, DOOR.y);
+  const dg = ctx.createLinearGradient(0, -DOOR.hh, 0, DOOR.hh);
+  if (opened) { dg.addColorStop(0, 'rgba(53,224,192,.05)'); dg.addColorStop(1, 'rgba(53,224,192,.55)'); }
+  else { dg.addColorStop(0, 'rgba(255,77,94,.05)'); dg.addColorStop(1, 'rgba(255,77,94,.30)'); }
+  ctx.fillStyle = dg;
+  ctx.fillRect(-DOOR.hw, -DOOR.hh, DOOR.hw * 2, DOOR.hh * 2);
+  ctx.strokeStyle = opened ? '#35e0c0' : '#ff4d5e';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(-DOOR.hw, -DOOR.hh, DOOR.hw * 2, DOOR.hh * 2);
+  ctx.fillStyle = opened ? '#35e0c0' : '#5a6070';
+  ctx.font = 'bold 15px system-ui'; ctx.textAlign = 'center';
+  ctx.fillText(opened ? 'ENTER' : 'LOCKED', 0, -DOOR.hh + 22);
+  ctx.restore();
+
+  // 星星
+  for (const st of stars) {
+    if (st.got) continue;
+    const bob = Math.sin(time * 3 + st.spin) * 4;
+    ctx.save();
+    ctx.translate(st.x, st.y + bob);
+    ctx.shadowColor = 'rgba(255,200,110,.9)'; ctx.shadowBlur = 18;
+    ctx.fillStyle = '#ffd27a';
+    starPath(ctx, 0, 0, st.r, st.spin * 0.6); ctx.fill();
+    ctx.restore();
+  }
+
+  // 起点标记
+  ctx.strokeStyle = 'rgba(255,255,255,.12)';
+  ctx.setLineDash([6, 6]); ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(SPAWN.x, SPAWN.y, R + 8, 0, 6.2832); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // 拖尾
+  if (trail.length >= 4) {
+    ctx.lineCap = 'round';
+    for (let i = 2; i < trail.length; i += 2) {
+      const a = (i / trail.length) * 0.5;
+      ctx.strokeStyle = 'rgba(255,138,61,' + a.toFixed(3) + ')';
+      ctx.lineWidth = 1 + (i / trail.length) * 6;
+      ctx.beginPath();
+      ctx.moveTo(trail[i - 2], trail[i - 1]);
+      ctx.lineTo(trail[i], trail[i + 1]);
+      ctx.stroke();
+    }
+  }
+
+  // 球（渲染插值：帧率无关且平滑）
+  const bx = ball.tp ? ball.x : lerp(ball.px, ball.x, alpha);
+  const by = ball.tp ? ball.y : lerp(ball.py, ball.y, alpha);
+  ctx.save();
+  ctx.shadowColor = 'rgba(255,138,61,.85)'; ctx.shadowBlur = 26;
+  const bg2 = ctx.createRadialGradient(bx - 5, by - 6, 2, bx, by, R);
+  bg2.addColorStop(0, '#fff1de'); bg2.addColorStop(.45, '#ff9a4d'); bg2.addColorStop(1, '#d1551a');
+  ctx.fillStyle = bg2;
+  ctx.beginPath(); ctx.arc(bx, by, R, 0, 6.2832); ctx.fill();
+  ctx.restore();
+
+  // 粒子
+  for (const p of particles) {
+    ctx.globalAlpha = clamp(p.life / p.max, 0, 1);
+    ctx.fillStyle = p.color;
+    ctx.fillRect(p.x - 1.5, p.y - 1.5, 3.5, 3.5);
+  }
+  ctx.globalAlpha = 1;
+
+  // 点击涟漪
+  for (const rp of ripples) {
+    const k = 1 - rp.life / 0.4;
+    ctx.strokeStyle = rp.bad ? 'rgba(255,77,94,' + (1 - k) + ')' : 'rgba(255,170,90,' + (1 - k) + ')';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(rp.x, rp.y, 6 + k * 46, 0, 6.2832); ctx.stroke();
+  }
+
+  // 引导文字
+  if (time < 7 && !won) {
+    ctx.fillStyle = 'rgba(232,236,243,' + clamp(1 - (time - 5) / 2, 0, .85) + ')';
+    ctx.font = '16px system-ui'; ctx.textAlign = 'center';
+    ctx.fillText('点击 / 触摸：朝该方向给球一个冲量 · 收集 5 颗星星后进入传送门', W / 2, 46);
+  }
+
+  // 调试信息
+  if (debug) {
+    ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(8, 8, 250, 86);
+    ctx.fillStyle = '#35e0c0'; ctx.font = '12px ui-monospace,monospace'; ctx.textAlign = 'left';
+    const sp = Math.hypot(ball.vx, ball.vy);
+    ctx.fillText('dt=1/120  steps/frame=' + stepsLastFrame, 16, 24);
+    ctx.fillText('v=(' + ball.vx.toFixed(1) + ',' + ball.vy.toFixed(1) + ') |v|=' + sp.toFixed(1), 16, 40);
+    ctx.fillText('pos=(' + ball.x.toFixed(2) + ',' + ball.y.toFixed(2) + ')', 16, 56);
+    ctx.fillText('grounded=' + (groundN ? 'yes' : 'no') + '  alpha=' + alpha.toFixed(2), 16, 72);
+    if (lastContact) {
+      ctx.strokeStyle = '#35e0c0'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(bx, by);
+      ctx.lineTo(bx + lastContact.x * 34, by + lastContact.y * 34); ctx.stroke();
+    }
+  }
+
+  ctx.restore();
+
+  // HUD
+  const got = stars.filter(s => s.got).length;
+  el.star.textContent = got + '/' + stars.length;
+  el.time.textContent = time.toFixed(2) + 's';
+  el.click.textContent = String(clicks);
+  el.dead.textContent = String(deaths);
+  for (let i = 0; i < cells.length; i++) cells[i].classList.toggle('on', i < energy);
+}
+
+// ---------- 主循环：固定步长累加器 ----------
+let acc = 0, last = 0, fps = 60;
+function frame(now) {
+  if (!last) last = now;
+  let ft = (now - last) / 1000;
+  last = now;
+  if (ft > MAX_FRAME) ft = MAX_FRAME;   // 上限：切后台/卡顿后不追补
+  if (ft < 0) ft = 0;                   // 下限：时间戳异常时不倒退时间
+  fps = fps * 0.9 + (1 / Math.max(ft, 1e-4)) * 0.1;
+  stepsLastFrame = 0;
+  if (!paused && !won) {
+    acc += ft;
+    while (acc >= DT && stepsLastFrame < MAX_STEPS) { step(DT); acc -= DT; stepsLastFrame++; }
+    if (stepsLastFrame >= MAX_STEPS) acc = 0;
+  } else {
+    acc = 0;
+  }
+  draw(clamp(acc / DT, 0, 1));
+  requestAnimationFrame(frame);
+}
+resize();
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

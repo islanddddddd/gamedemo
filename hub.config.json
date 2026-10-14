@@ -36,5 +36,9 @@
     "title": "代码肉鸽",
     "entry": "coderogue.html",
     "review": "没意思"
+  },
+  "小球弹跳": {
+    "title": "小球弹跳",
+    "entry": "canvas-bounce.html"
   }
 }
