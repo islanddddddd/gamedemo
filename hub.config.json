@@ -44,5 +44,9 @@
   "拆楼2D版": {
     "title": "拆楼2D版",
     "entry": "index(7).html"
+  },
+  "看云": {
+    "title": "看云",
+    "entry": "cloud.html"
   }
 }
