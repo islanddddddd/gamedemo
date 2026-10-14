@@ -1,0 +1,16 @@
+# 工具 / 环境生成的目录
+.gstack/
+.workbuddy/
+.codebuddy/
+
+# 操作系统 / 编辑器垃圾文件
+Thumbs.db
+Desktop.ini
+.DS_Store
+ehthumbs.db
+
+# 日志
+*.log
+
+# 依赖（本项目暂无，预留）
+node_modules/
